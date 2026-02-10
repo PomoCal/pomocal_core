@@ -1,0 +1,24 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Xcode
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+*.m
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# macOS
+.DS_Store
+
+# Build Artifacts
+*.app
+*.dmg
+dmg_source/
