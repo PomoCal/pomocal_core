@@ -23,7 +23,7 @@ struct CircularTimerView: View {
             VStack(spacing: 10) {
                 if !timerManager.isRunning && timerManager.mode == .pomodoro {
                     // Time Editor Mode
-                    HStack(spacing: 15) {
+                    HStack(spacing: 5) {
                         // Minutes
                         VStack(spacing: 5) {
                             Button(action: { adjustTime(minutes: 1) }) {
@@ -33,9 +33,21 @@ struct CircularTimerView: View {
                             }
                             .buttonStyle(.plain)
                             
-                            Text(String(format: "%02d", Int(timerManager.timeRemaining) / 60))
-                                .font(.system(size: 60, weight: .bold, design: .rounded))
-                                .minimumScaleFactor(0.5)
+                            TextField("", text: Binding(
+                                get: { String(format: "%02d", Int(timerManager.timeRemaining) / 60) },
+                                set: { newValue in
+                                    if let minutes = Int(newValue), minutes >= 0 {
+                                        let seconds = Int(timerManager.timeRemaining) % 60
+                                        let newTotal = TimeInterval(minutes * 60 + seconds)
+                                        timerManager.updateTimeRemaining(newTotal)
+                                    }
+                                }
+                            ))
+                            .font(.system(size: 60, weight: .bold, design: .rounded))
+                            .multilineTextAlignment(.center)
+                            .textFieldStyle(.plain)
+                            .frame(width: 80)
+                            .minimumScaleFactor(0.5)
                             
                             Button(action: { adjustTime(minutes: -1) }) {
                                 Image(systemName: "chevron.down")
@@ -58,9 +70,21 @@ struct CircularTimerView: View {
                             }
                             .buttonStyle(.plain)
                             
-                            Text(String(format: "%02d", Int(timerManager.timeRemaining) % 60))
-                                .font(.system(size: 60, weight: .bold, design: .rounded))
-                                .minimumScaleFactor(0.5)
+                            TextField("", text: Binding(
+                                get: { String(format: "%02d", Int(timerManager.timeRemaining) % 60) },
+                                set: { newValue in
+                                    if let seconds = Int(newValue), seconds >= 0 && seconds < 60 {
+                                        let minutes = Int(timerManager.timeRemaining) / 60
+                                        let newTotal = TimeInterval(minutes * 60 + seconds)
+                                        timerManager.updateTimeRemaining(newTotal)
+                                    }
+                                }
+                            ))
+                            .font(.system(size: 60, weight: .bold, design: .rounded))
+                            .multilineTextAlignment(.center)
+                            .textFieldStyle(.plain)
+                            .frame(width: 80)
+                            .minimumScaleFactor(0.5)
                             
                             Button(action: { adjustTime(seconds: -10) }) {
                                 Image(systemName: "chevron.down")
@@ -83,6 +107,8 @@ struct CircularTimerView: View {
                     .fontWeight(.bold)
                     .foregroundColor(.secondary)
                     .tracking(2)
+                
+
             }
         }
         .padding(40)

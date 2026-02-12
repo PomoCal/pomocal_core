@@ -6,6 +6,8 @@ class TimerManager: ObservableObject {
     @Published var isRunning = false
     @Published var isWorkMode = true // true: Work, false: Break
     @Published var selectedTask: TodoItem?
+    @Published var currentNote: String = "" // New: Note for the current session
+
     
     enum TimerMode {
         case pomodoro
@@ -15,12 +17,17 @@ class TimerManager: ObservableObject {
     @Published var mode: TimerMode = .pomodoro
     @Published var stopwatchSeconds: TimeInterval = 0
     
-    // For syncing with Calendar. Passes (Duration, TaskTitle, TaskID)
-    var onWorkSessionCompleted: ((TimeInterval, String?, UUID?) -> Void)?
+    @Published var showReviewSheet = false
+    
+    // For syncing with Calendar. Passes (Duration, TaskTitle, TaskID, Note, Rating)
+    var onWorkSessionCompleted: ((TimeInterval, String?, UUID?, String?, Int?) -> Void)?
+
     
     private var timer: Timer?
     private var workDuration: TimeInterval = 25 * 60
     private let breakDuration: TimeInterval = 5 * 60
+    
+    // ... existing setWorkDuration ...
     
     func setWorkDuration(minutes: Int) {
         pauseTimer()
@@ -82,11 +89,29 @@ class TimerManager: ObservableObject {
         pauseTimer()
         
         if isWorkMode {
-            // Notify to save to calendar
-            let taskTitle = selectedTask?.title ?? "Pomodoro Session"
-            onWorkSessionCompleted?(workDuration, taskTitle, selectedTask?.id)
+            // Show Review Sheet
+            // We do NOT call onWorkSessionCompleted here yet.
+            // We wait for user to review.
+            showReviewSheet = true
+            
+            // Clean up note if any was typed during session (it will be passed to finalize)
+        } else {
+            // Break is over, just switch back to work
+            switchMode()
         }
+    }
+    
+    func finalizeSession(rating: Int, note: String) {
+        // Now we save
+        let taskTitle = selectedTask?.title ?? "Pomodoro Session"
+        // Use the note from the review, which might be the one typed during session + edits
+        onWorkSessionCompleted?(workDuration, taskTitle, selectedTask?.id, note, rating)
         
+        // Clear temp
+        currentNote = ""
+        showReviewSheet = false
+        
+        // Switch to Break
         switchMode()
     }
     

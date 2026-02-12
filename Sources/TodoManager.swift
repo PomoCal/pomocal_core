@@ -13,6 +13,15 @@ struct BookInfo: Codable, Equatable {
 
 extension BookInfo: Identifiable {}
 
+struct WorkSession: Codable, Identifiable, Equatable {
+    let id: UUID
+    let startTime: Date
+    let endTime: Date
+    let duration: TimeInterval
+    let note: String?
+    var rating: Int? // 1-5 stars
+}
+
 struct TodoItem: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
@@ -26,6 +35,10 @@ struct TodoItem: Identifiable, Codable, Equatable {
     var actualRange: String?
     var timeSpent: TimeInterval = 0 // In seconds
     
+    // Subtasks & Sessions
+    var subtasks: [TodoItem]?
+    var sessions: [WorkSession]?
+    
     init(title: String, date: Date = Date(), category: String? = nil, book: BookInfo? = nil, goalRange: String? = nil, timeSpent: TimeInterval = 0) {
         self.id = UUID()
         self.title = title
@@ -35,6 +48,8 @@ struct TodoItem: Identifiable, Codable, Equatable {
         self.book = book
         self.goalRange = goalRange
         self.timeSpent = timeSpent
+        self.subtasks = []
+        self.sessions = []
     }
 }
 
@@ -201,20 +216,132 @@ class TodoManager: ObservableObject {
     }
     
     func addTime(to todoId: UUID, amount: TimeInterval) {
-        if let index = todos.firstIndex(where: { $0.id == todoId }) {
-            todos[index].timeSpent += amount
+        // Recursive helper that returns true if the task was found (and updated) in this branch
+        func updateRecursive(_ item: inout TodoItem) -> Bool {
+            if item.id == todoId {
+                item.timeSpent += amount
+                return true
+            }
+            
+            if item.subtasks != nil {
+                for i in 0..<(item.subtasks!.count) {
+                    if updateRecursive(&item.subtasks![i]) {
+                        // Found in children, so add time to self (bubble up)
+                        item.timeSpent += amount
+                        return true
+                    }
+                }
+            }
+            return false
+        }
+        
+        for i in 0..<todos.count {
+            if updateRecursive(&todos[i]) {
+                return 
+            }
         }
     }
     
-    // Batch update from Calendar Sync
-    func batchUpdateTime(_ timeMap: [UUID: TimeInterval]) {
-        for i in 0..<todos.count {
-            let id = todos[i].id
-            // If ID is missing from map, it means 0 time spent on this day (or all events deleted)
-            let newTime = timeMap[id] ?? 0
-            if todos[i].timeSpent != newTime {
-                todos[i].timeSpent = newTime
+    func addSession(to todoId: UUID, session: WorkSession) {
+        // We want to add the session to the *parent* task if the target is a subtask.
+        // If the target is already a helper, add it there.
+        
+        // Helper to find parent or self
+        func findAndAdd(_ item: inout TodoItem) -> Bool {
+            // Case 1: Target is this item (Top Level)
+            if item.id == todoId {
+                if item.sessions == nil { item.sessions = [] }
+                item.sessions?.append(session)
+                return true
             }
+            
+            // Case 2: Target is a subtask of this item
+            if item.subtasks != nil {
+                for i in 0..<(item.subtasks!.count) {
+                    if item.subtasks![i].id == todoId {
+                        // Found subtask! Add session to PARENT (item)
+                        // Prepend subtask title to note
+                        let subTitle = item.subtasks![i].title
+                        let originalNote = session.note ?? ""
+                        // Format: [Subtask Title] Note...
+                        let newNote = "[\(subTitle)] \(originalNote)".trimmingCharacters(in: .whitespacesAndNewlines)
+                        
+                        // We need to create a new WorkSession because 'let' properties
+                        // Actually, I made 'rating' var, but others are let.
+                        // Let's create a new struct.
+                         let updatedSession = WorkSession(
+                            id: session.id,
+                            startTime: session.startTime,
+                            endTime: session.endTime,
+                            duration: session.duration,
+                            note: newNote,
+                            rating: session.rating
+                        )
+                        
+                        if item.sessions == nil { item.sessions = [] }
+                        item.sessions?.append(updatedSession)
+                        return true
+                    }
+                    
+                    // Case 3: Recursion (Grandchildren?) - Assuming depth 1 for now based on recent plan, 
+                    // but let's handle recursion if we supported it.
+                    // If we found it deep down, we should probably add it to the *immediate parent* of that subtask in the loop?
+                    // Or the top-level parent? 
+                    // User said "Subtasks inherit parent".
+                    // Let's stick to immediate parent for now, but since we are inside 'findAndAdd', 
+                    // if we recursive call findAndAdd(&subtasks[i]), it treats subtasks[i] as the parent.
+                    // So yes, it bubbles to immediate parent.
+                    if findAndAdd(&item.subtasks![i]) {
+                        return true
+                    }
+                }
+            }
+            return false
+        }
+        
+        for i in 0..<todos.count {
+            if findAndAdd(&todos[i]) {
+                return
+            }
+        }
+    }
+    
+    // Batch update from Calendar Sync (Recursive with Rollup)
+    func batchUpdateTime(_ timeMap: [UUID: TimeInterval]) {
+        
+        // Returns the total time for this item (including children)
+        @discardableResult
+        func updateRecursive(_ item: inout TodoItem) -> TimeInterval {
+            // 1. Get direct time from map (if any events linked to this specific ID)
+            let directTime = timeMap[item.id] ?? 0
+            
+            // 2. Sum up children time
+            var childrenTime: TimeInterval = 0
+            if item.subtasks != nil {
+                for i in 0..<(item.subtasks!.count) {
+                    childrenTime += updateRecursive(&item.subtasks![i])
+                }
+            }
+            
+            // 3. Update self
+            // Note: If we have direct time, use it. But usually calendar events are linked to the specific task/subtask.
+            // If this is a parent, its time is (Any direct events on parent) + (Sum of all subtasks).
+            // However, 'timeMap' comes from CalendarManager, which calculates duration based on event titles/IDs.
+            // If an event is linked to a subtask ID, timeMap[subID] has value.
+            // If an event is linked to parent ID, timeMap[parentID] has value.
+            // So Total = timeMap[id] + childrenSum.
+            
+            let total = directTime + childrenTime
+            
+            if item.timeSpent != total {
+                item.timeSpent = total
+            }
+            
+            return total
+        }
+        
+        for i in 0..<todos.count {
+            updateRecursive(&todos[i])
         }
     }
     

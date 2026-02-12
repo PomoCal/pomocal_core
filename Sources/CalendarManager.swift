@@ -88,7 +88,7 @@ class CalendarManager: ObservableObject {
         }
     }
 
-    func savePomodoroEvent(duration: TimeInterval, title: String, taskId: UUID? = nil) {
+    func savePomodoroEvent(duration: TimeInterval, title: String, taskId: UUID? = nil, note: String? = nil) {
         guard hasAccess else { return }
         
         let event = EKEvent(eventStore: eventStore)
@@ -97,9 +97,12 @@ class CalendarManager: ObservableObject {
         event.endDate = Date()
         event.calendar = eventStore.defaultCalendarForNewEvents
         
-        // Save Task ID in URL field for robust linking
         if let id = taskId {
             event.url = URL(string: "pomocal://task/\(id.uuidString)")
+        }
+        
+        if let note = note, !note.isEmpty {
+            event.notes = note
         }
         
         do {
