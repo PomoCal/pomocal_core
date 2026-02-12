@@ -15,8 +15,8 @@ class TimerManager: ObservableObject {
     @Published var mode: TimerMode = .pomodoro
     @Published var stopwatchSeconds: TimeInterval = 0
     
-    // For syncing with Calendar. Passes (Duration, TaskTitle)
-    var onWorkSessionCompleted: ((TimeInterval, String?) -> Void)?
+    // For syncing with Calendar. Passes (Duration, TaskTitle, TaskID)
+    var onWorkSessionCompleted: ((TimeInterval, String?, UUID?) -> Void)?
     
     private var timer: Timer?
     private var workDuration: TimeInterval = 25 * 60
@@ -84,7 +84,7 @@ class TimerManager: ObservableObject {
         if isWorkMode {
             // Notify to save to calendar
             let taskTitle = selectedTask?.title ?? "Pomodoro Session"
-            onWorkSessionCompleted?(workDuration, taskTitle)
+            onWorkSessionCompleted?(workDuration, taskTitle, selectedTask?.id)
         }
         
         switchMode()

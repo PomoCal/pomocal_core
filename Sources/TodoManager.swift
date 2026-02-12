@@ -206,6 +206,18 @@ class TodoManager: ObservableObject {
         }
     }
     
+    // Batch update from Calendar Sync
+    func batchUpdateTime(_ timeMap: [UUID: TimeInterval]) {
+        for i in 0..<todos.count {
+            let id = todos[i].id
+            // If ID is missing from map, it means 0 time spent on this day (or all events deleted)
+            let newTime = timeMap[id] ?? 0
+            if todos[i].timeSpent != newTime {
+                todos[i].timeSpent = newTime
+            }
+        }
+    }
+    
     func deleteTodo(at offsets: IndexSet) {
         // Since 'todos' only has current date's items, and deleteTodo is likely called from the List showing them:
         todos.remove(atOffsets: offsets)

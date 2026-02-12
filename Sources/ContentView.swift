@@ -257,14 +257,29 @@ struct ContentView: View {
             calendarManager.fetchEvents(for: newDate)
         }
         .onAppear {
-            timerManager.onWorkSessionCompleted = { duration, taskTitle in
-                // 1. Save to Calendar
-                calendarManager.savePomodoroEvent(duration: duration, title: taskTitle ?? "Pomodoro Session")
+            timerManager.onWorkSessionCompleted = { duration, taskTitle, taskId in
+                // 1. Save to Calendar with ID
+                calendarManager.savePomodoroEvent(duration: duration, title: taskTitle ?? "Pomodoro Session", taskId: taskId)
                 // 2. Update Task Time
+                // Note: Now that we listen to Calendar changes, strictly speaking we could wait for Calendar to update?
+                // But for instant UI feedback, we can still update locally.
+                // However, to avoid race conditions, maybe let Calendar drive it if we trust it fast enough.
+                // But let's keep local update for responsiveness, and Calendar sync will overwrite it (likely with same value).
                 if let task = timerManager.selectedTask {
                     todoManager.addTime(to: task.id, amount: duration)
                 }
             }
+        }
+        .onChange(of: calendarManager.events) { _ in
+            print("Events changed from CalendarManager, syncing time...")
+            // Sync time from Calendar events to Tasks
+            var legacyMap: [String: UUID] = [:]
+            for todo in todoManager.todosForSelectedDate {
+                legacyMap[todo.title] = todo.id
+            }
+            
+            let timeMap = calendarManager.calculateTimeSpent(for: todoManager.selectedDate, legacyTitles: legacyMap)
+            todoManager.batchUpdateTime(timeMap)
         }
     }
 }
@@ -445,8 +460,9 @@ struct TodoView: View {
                             }
                             
                             Button(role: .destructive) {
-                                // Also delete matching calendar events
-                                calendarManager.deletePomodoroEvents(for: todo.title, on: todo.date)
+                                // Delete matching calendar events (using ID and Title fallback)
+                                calendarManager.deletePomodoroEvents(for: todo.title, on: todo.date, taskId: todo.id)
+                                
                                 if let index = todoManager.todos.firstIndex(where: { $0.id == todo.id }) {
                                     todoManager.todos.remove(at: index)
                                 }
