@@ -23,6 +23,7 @@ struct CircularTimerView: View {
                     .frame(width: 700, height: 700)
                     .blur(radius: 50)
                     .animation(.easeInOut(duration: 2.0), value: timerManager.isWorkMode)
+                    .allowsHitTesting(false)
             }
             
             VStack(spacing: 30) {
@@ -92,7 +93,7 @@ struct TimeComponentEditor: View {
     @Binding var value: Int
     let range: ClosedRange<Int>
     let step: Int
-    @State private var isHovering = false
+
     
     var body: some View {
         VStack(spacing: 4) {
@@ -103,23 +104,22 @@ struct TimeComponentEditor: View {
                 value = newValue
             }) {
                 Image(systemName: "chevron.up")
-                    .font(.caption.bold())
+                    .font(.title2.bold()) // Increased size for better clicking
                     .foregroundColor(.secondary)
-                    .frame(height: 10)
+                    .frame(height: 20) // Taller hit area
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .opacity(isHovering ? 1.0 : 0.0) 
             
             // Card Input
             ZStack {
                 // Background Card
-                RoundedRectangle(cornerRadius: 12) // Slightly larger radius for larger card
+                RoundedRectangle(cornerRadius: 12)
                     .fill(Color.white)
                     .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
                 
-                // Split Line
-                VStack {
+                // Sidebar / Split Line (Optional - keeping valid structure)
+                 VStack {
                     Spacer()
                     Divider().background(Color.black.opacity(0.1))
                     Spacer()
@@ -138,12 +138,12 @@ struct TimeComponentEditor: View {
                         }
                     }
                 ))
-                .font(.system(size: 100, weight: .bold, design: .monospaced)) // Match FlipClock font
+                .font(.system(size: 80, weight: .bold, design: .monospaced)) // Resize to 80
                 .multilineTextAlignment(.center)
                 .textFieldStyle(.plain)
-                .foregroundColor(.black) // Ensure black text
+                .foregroundColor(.black)
             }
-            .frame(width: 176, height: 100) // 2 digits wide (80*2 + spacing)
+            .frame(width: 176, height: 100)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
@@ -156,19 +156,13 @@ struct TimeComponentEditor: View {
                 value = newValue
             }) {
                 Image(systemName: "chevron.down")
-                    .font(.caption.bold())
+                    .font(.title2.bold()) // Increased size
                     .foregroundColor(.secondary)
-                    .frame(height: 10)
+                    .frame(height: 20) // Taller hit area
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .opacity(isHovering ? 1.0 : 0.0)
         }
         .contentShape(Rectangle())
-        .onHover { hover in
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isHovering = hover
-            }
-        }
     }
 }

@@ -54,6 +54,9 @@ struct ContentView: View {
         .onAppear {
             calendarManager.fetchEvents(for: todoManager.selectedDate)
         }
+        .onChange(of: todoManager.selectedDate) { newDate in
+            calendarManager.fetchEvents(for: newDate)
+        }
         .sheet(isPresented: $isDDaySheetPresented) {
             DDayView(manager: dDayManager)
                 .environmentObject(calendarManager)
@@ -268,10 +271,13 @@ struct ContentView: View {
                         .foregroundColor(.secondary)
                         .tracking(4)
                     
-                    Text(timerManager.formattedTime())
-                        .font(.system(size: 80, weight: .thin, design: .monospaced))
-                        .foregroundColor(.primary)
-                        .padding()
+                    FlipClockView(
+                        seconds: Int(timerManager.stopwatchSeconds),
+                        showHours: true,
+                        fontSize: 70, 
+                        color: .primary
+                    )
+                    .padding()
                 }
                 .frame(height: 300)
             }
