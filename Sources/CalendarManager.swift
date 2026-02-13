@@ -89,18 +89,27 @@ class CalendarManager: ObservableObject {
     }
 
     func getOrCreatePomoCalCalendar() -> EKCalendar? {
-        // 1. Check if it already exists
+        let kPomoCalID = "PomoCalCalendarID"
+        
+        // 1. Try to get via saved Identifier
+        if let savedID = UserDefaults.standard.string(forKey: kPomoCalID),
+           let calendar = eventStore.calendar(withIdentifier: savedID) {
+            return calendar
+        }
+        
+        // 2. Check if it already exists by Title (fallback)
         let calendars = eventStore.calendars(for: .event)
         if let existing = calendars.first(where: { $0.title == "PomoCal" }) {
+            // Save ID for next time
+            UserDefaults.standard.set(existing.calendarIdentifier, forKey: kPomoCalID)
             return existing
         }
         
-        // 2. Create new
+        // 3. Create new
         let newCalendar = EKCalendar(for: .event, eventStore: eventStore)
         newCalendar.title = "📆 PomoCal"
         
-        // 3. Set Source (Prefer iCloud, then Local)
-        // Find iCloud source
+        // Set Source (Prefer iCloud, then Local)
         let sources = eventStore.sources
         if let iCloud = sources.first(where: { $0.sourceType == .calDAV && $0.title == "iCloud" }) {
             newCalendar.source = iCloud
@@ -113,6 +122,8 @@ class CalendarManager: ObservableObject {
         do {
             try eventStore.saveCalendar(newCalendar, commit: true)
             print("Created PomoCal calendar.")
+            // Save ID
+            UserDefaults.standard.set(newCalendar.calendarIdentifier, forKey: kPomoCalID)
             return newCalendar
         } catch {
             print("Failed to create PomoCal calendar: \(error)")

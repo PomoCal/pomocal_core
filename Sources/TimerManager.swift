@@ -101,20 +101,34 @@ class TimerManager: ObservableObject {
         }
     }
     
+    func finishStopwatch() {
+        guard mode == .stopwatch else { return }
+        pauseTimer()
+        if stopwatchSeconds > 0 {
+            showReviewSheet = true
+        }
+    }
+    
     func finalizeSession(rating: Int, note: String) {
         // Now we save
-        let taskTitle = selectedTask?.title ?? "Pomodoro Session"
+        let taskTitle = selectedTask?.title ?? (mode == .pomodoro ? "Pomodoro Session" : "Stopwatch Session")
         let bookTitle = selectedTask?.book?.title
         
+        let duration = mode == .pomodoro ? workDuration : stopwatchSeconds
+        
         // Use the note from the review, which might be the one typed during session + edits
-        onWorkSessionCompleted?(workDuration, taskTitle, bookTitle, selectedTask?.id, note, rating)
+        onWorkSessionCompleted?(duration, taskTitle, bookTitle, selectedTask?.id, note, rating)
         
         // Clear temp
         currentNote = ""
         showReviewSheet = false
         
-        // Switch to Break
-        switchMode()
+        // Mode Specific Cleanup
+        if mode == .pomodoro {
+            switchMode() // Switch to Break/Work
+        } else {
+            stopwatchSeconds = 0 // Reset Stopwatch
+        }
     }
     
     func skipBreak() {

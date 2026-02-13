@@ -211,6 +211,20 @@ struct ContentView: View {
                     
             } else {
                 // Stopwatch View
+                if let task = timerManager.selectedTask {
+                    Text(task.title)
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                        .padding(.bottom, 10)
+                } else {
+                    Text("Select a task")
+                        .font(.callout)
+                        .foregroundColor(.secondary)
+                        .padding(.bottom, 10)
+                }
+
                 VStack(spacing: 20) {
                     Text("STOPWATCH")
                         .font(.headline)
@@ -263,12 +277,22 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .keyboardShortcut(.space, modifiers: [])
                 
-                // Reset
-                Button(action: timerManager.resetTimer) {
-                    Image(systemName: "arrow.counterclockwise")
-                    .font(.title2)
+                // Stop / Reset
+                if timerManager.mode == .stopwatch {
+                    Button(action: timerManager.finishStopwatch) {
+                        Image(systemName: "square.fill")
+                            .font(.title2)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Finish & Save")
+                } else {
+                    Button(action: timerManager.resetTimer) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.title2)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Reset Timer")
                 }
-                .buttonStyle(.plain)
             }
             .padding(.top, 30)
             
@@ -492,8 +516,8 @@ struct TodoView: View {
                     onDelete: { item in
                         deleteTodoItem(item)
                     },
-                    onSelectTask: { item in
-                        selectTask(item)
+                    onStartTask: { item in
+                        startTask(item)
                     },
                     isTimerRunning: timerManager.isRunning,
                     isTimerSelected: timerManager.selectedTask == flatItem.item
@@ -662,10 +686,33 @@ private func selectTask(_ item: TodoItem) {
          pendingTask = item
          showSwitchAlert = true
     } else {
-        // Safe to switch
-        timerManager.selectedTask = item
+            // Safe to switch
+            timerManager.selectedTask = item
+        }
     }
-}
+    
+    // Helper to Prepare Task (Select & Reset Timer)
+    private func startTask(_ item: TodoItem) {
+        // If timer is running, pause/reset first
+        if timerManager.isRunning {
+             timerManager.pauseTimer()
+        }
+        
+        // Switch Task
+        timerManager.selectedTask = item
+        
+        // Ensure we are in a mode that can run
+        // If we are in Break, switch to Work.
+        if !timerManager.isWorkMode && timerManager.mode == .pomodoro {
+            timerManager.switchMode() // back to work
+        }
+        
+        // Reset Timer (Ready to Start)
+        timerManager.resetTimer()
+        
+        // Note: User requested NOT to auto-start. Just prepare.
+        // timerManager.startTimer() 
+    }
 }
 
 

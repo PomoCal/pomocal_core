@@ -14,7 +14,7 @@ struct TodoRowView: View {
     var onUpdate: (TodoItem) -> Void
     var onAddSubtask: (TodoItem) -> Void
     var onDelete: (TodoItem) -> Void
-    var onSelectTask: (TodoItem) -> Void
+    var onStartTask: (TodoItem) -> Void
     
     // Timer State for visual feedback
     var isTimerRunning: Bool
@@ -133,7 +133,7 @@ struct TodoRowView: View {
                         .scaleEffect(isTimerRunning ? 1.1 : 1.0)
                         .animation(isTimerRunning ? Animation.easeInOut(duration: 0.8).repeatForever(autoreverses: true) : .default, value: isTimerRunning)
                 } else if isHovering {
-                    Button(action: { onSelectTask(todo) }) {
+                    Button(action: { onStartTask(todo) }) {
                         Image(systemName: "play.circle")
                             .font(.title3)
                             .foregroundColor(.secondary)
