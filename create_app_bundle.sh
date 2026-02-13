@@ -2,7 +2,10 @@
 
 # Configuration
 APP_NAME="PomodoroCalendar"
-BIN_PATH=$(swift build --show-bin-path)
+# Build the project first
+echo "Building project..."
+swift build -c release
+BIN_PATH=$(swift build -c release --show-bin-path)
 
 # Create App Bundle Structure
 mkdir -p "$APP_NAME.app/Contents/MacOS"

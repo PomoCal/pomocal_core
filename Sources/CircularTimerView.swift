@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CircularTimerView: View {
     @ObservedObject var timerManager: TimerManager
+    @State private var isHovering = false
     
     var body: some View {
         ZStack {
@@ -11,12 +12,15 @@ struct CircularTimerView: View {
                 .opacity(0.1)
                 .foregroundColor(Color.primary)
             
-            // Progress Ring
+            // Progress Ring with Glow and Gradient
             Circle()
                 .trim(from: 0.0, to: CGFloat(min(timerManager.progress, 1.0)))
-                .stroke(style: StrokeStyle(lineWidth: 20, lineCap: .round, lineJoin: .round))
-                .foregroundColor(timerManager.isWorkMode ? Color.indigo : Color.mint)
+                .stroke(
+                    timerManager.isWorkMode ? Color.focusGradient : Color.breakGradient,
+                    style: StrokeStyle(lineWidth: 20, lineCap: .round, lineJoin: .round)
+                )
                 .rotationEffect(Angle(degrees: 270.0))
+                .shadow(color: (timerManager.isWorkMode ? Color.indigo : Color.teal).opacity(0.6), radius: 15, x: 0, y: 0)
                 .animation(.linear(duration: 1.0), value: timerManager.progress)
             
             // Time Text & Controls
@@ -25,115 +29,121 @@ struct CircularTimerView: View {
                     // Time Editor Mode
                     HStack(spacing: 5) {
                         // Minutes
-                        VStack(spacing: 5) {
-                            Button(action: { adjustTime(minutes: 1) }) {
-                                Image(systemName: "chevron.up")
-                                    .font(.title3)
-                                    .foregroundColor(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                            
-                            TextField("", text: Binding(
-                                get: { String(format: "%02d", Int(timerManager.timeRemaining) / 60) },
-                                set: { newValue in
-                                    if let minutes = Int(newValue), minutes >= 0 {
-                                        let seconds = Int(timerManager.timeRemaining) % 60
-                                        let newTotal = TimeInterval(minutes * 60 + seconds)
-                                        timerManager.updateTimeRemaining(newTotal)
-                                    }
+                        TimeComponentEditor(
+                            value: Binding(
+                                get: { Int(timerManager.timeRemaining) / 60 },
+                                set: { minute in
+                                    let seconds = Int(timerManager.timeRemaining) % 60
+                                    let newTotal = TimeInterval(minute * 60 + seconds)
+                                    timerManager.updateTimeRemaining(newTotal)
                                 }
-                            ))
-                            .font(.system(size: 60, weight: .bold, design: .rounded))
-                            .multilineTextAlignment(.center)
-                            .textFieldStyle(.plain)
-                            .frame(width: 80)
-                            .minimumScaleFactor(0.5)
-                            
-                            Button(action: { adjustTime(minutes: -1) }) {
-                                Image(systemName: "chevron.down")
-                                    .font(.title3)
-                                    .foregroundColor(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                            ),
+                            range: 0...99,
+                            step: 1
+                        )
                         
                         Text(":")
                             .font(.system(size: 60, weight: .bold, design: .rounded))
-                            .offset(y: -5)
+                            .offset(y: -4)
+                            .foregroundColor(.secondary)
                         
                         // Seconds
-                        VStack(spacing: 5) {
-                            Button(action: { adjustTime(seconds: 10) }) {
-                                Image(systemName: "chevron.up")
-                                    .font(.title3)
-                                    .foregroundColor(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                            
-                            TextField("", text: Binding(
-                                get: { String(format: "%02d", Int(timerManager.timeRemaining) % 60) },
-                                set: { newValue in
-                                    if let seconds = Int(newValue), seconds >= 0 && seconds < 60 {
-                                        let minutes = Int(timerManager.timeRemaining) / 60
-                                        let newTotal = TimeInterval(minutes * 60 + seconds)
-                                        timerManager.updateTimeRemaining(newTotal)
-                                    }
+                        TimeComponentEditor(
+                            value: Binding(
+                                get: { Int(timerManager.timeRemaining) % 60 },
+                                set: { second in
+                                    let minutes = Int(timerManager.timeRemaining) / 60
+                                    let newTotal = TimeInterval(minutes * 60 + second)
+                                    timerManager.updateTimeRemaining(newTotal)
                                 }
-                            ))
-                            .font(.system(size: 60, weight: .bold, design: .rounded))
-                            .multilineTextAlignment(.center)
-                            .textFieldStyle(.plain)
-                            .frame(width: 80)
-                            .minimumScaleFactor(0.5)
-                            
-                            Button(action: { adjustTime(seconds: -10) }) {
-                                Image(systemName: "chevron.down")
-                                    .font(.title3)
-                                    .foregroundColor(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                            ),
+                            range: 0...59,
+                            step: 10
+                        )
                     }
                 } else {
                     // Display Mode
                     Text(timerManager.formattedTime())
-                        .font(.system(size: 60, weight: .bold, design: .rounded))
+                        .font(.system(size: 70, weight: .bold, design: .rounded))
                         .minimumScaleFactor(0.5)
                         .lineLimit(1)
+                        .foregroundColor(.primary)
+                        .animation(.default, value: timerManager.timeRemaining)
                 }
                 
                 Text(timerManager.isWorkMode ? "FOCUS" : "BREAK")
                     .font(.caption)
                     .fontWeight(.bold)
                     .foregroundColor(.secondary)
-                    .tracking(2)
-                
-
+                    .tracking(4)
+                    .opacity(0.8)
             }
         }
         .padding(40)
     }
+}
+
+// Helper Component for Time Editing
+struct TimeComponentEditor: View {
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    let step: Int
+    @State private var isHovering = false
     
-    private func adjustTime(minutes: Int = 0, seconds: Int = 0) {
-        let currentMinutes = Int(timerManager.timeRemaining) / 60
-        let currentSeconds = Int(timerManager.timeRemaining) % 60
-        
-        var newMinutes = currentMinutes + minutes
-        var newSeconds = currentSeconds + seconds
-        
-        // Handle overflow/underflow for seconds
-        if newSeconds >= 60 {
-            newSeconds -= 60
-            newMinutes += 1
-        } else if newSeconds < 0 {
-            newSeconds += 60
-            newMinutes -= 1
+    var body: some View {
+        VStack(spacing: 0) {
+            Button(action: {
+                var newValue = value + step
+                if newValue > range.upperBound { newValue = range.lowerBound } // Wrap around
+                value = newValue
+            }) {
+                Image(systemName: "chevron.up")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+                    .frame(height: 20)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .opacity(isHovering ? 1.0 : 0.0) // Show on hover
+            
+            TextField("", text: Binding(
+                get: { String(format: "%02d", value) },
+                set: { newValue in
+                    if let intValue = Int(newValue) {
+                         // Allow typing, clamp on commit or processing if needed, 
+                         // but for live update let's clamp immediately
+                         if intValue >= range.lowerBound && intValue <= range.upperBound {
+                             value = intValue
+                         } else if intValue > range.upperBound {
+                             value = range.upperBound
+                         }
+                    }
+                }
+            ))
+            .font(.system(size: 60, weight: .bold, design: .rounded))
+            .multilineTextAlignment(.center)
+            .textFieldStyle(.plain)
+            .frame(width: 80, height: 70)
+
+            Button(action: {
+                var newValue = value - step
+                if newValue < range.lowerBound { newValue = range.upperBound } // Wrap around
+                value = newValue
+            }) {
+                Image(systemName: "chevron.down")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+                    .frame(height: 20)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .opacity(isHovering ? 1.0 : 0.0)
         }
-        
-        // Clamp and update
-        if newMinutes < 0 { newMinutes = 0; newSeconds = 0 }
-        
-        let newTotal = TimeInterval(newMinutes * 60 + newSeconds)
-        timerManager.updateTimeRemaining(newTotal)
+        .contentShape(Rectangle())
+        .onHover { hover in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isHovering = hover
+            }
+        }
     }
 }

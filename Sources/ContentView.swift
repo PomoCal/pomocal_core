@@ -7,6 +7,8 @@ struct ContentView: View {
     @EnvironmentObject var todoManager: TodoManager
     
     @State private var selectedTab: Tab = .tasks
+    @State private var isNoteSheetPresented = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     
     enum Tab: String, CaseIterable {
         case tasks = "Tasks"
@@ -14,131 +16,24 @@ struct ContentView: View {
         case summary = "Summary"
     }
     
-    @State private var isNoteSheetPresented = false
-    
     var body: some View {
-        HSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             // LEFT: Sidebar (Calendar & Events)
-            VStack(spacing: 0) {
-                // Calendar Month View
-                CalendarGridView() 
-                    .padding(.bottom)
-                
-                Divider()
-                
-                // Today's Date Header
-                HStack {
-                    Text("TODAY")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                }
-                .padding()
-                
-                // Mini list of system events
-                CalendarListView()
-                
-                Spacer()
-                
-                Button(action: {
-                    todoManager.forceSync()
-                }) {
-                    HStack {
-                        Image(systemName: "icloud.and.arrow.up")
-                        Text("Sync Now")
-                    }
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
-                    .padding(8)
-                    .background(Color.secondary.opacity(0.1))
-                    .cornerRadius(8)
-                }
-                .buttonStyle(.plain)
-                .padding(.bottom, 20)
-                .help("Force save data to iCloud")
-                .contextMenu {
-                    Button {
-                        todoManager.selectSyncFolder()
-                    } label: {
-                        Label("Change Folder...", systemImage: "folder.badge.gear")
-                    }
-                    
-                    if let path = todoManager.syncPath {
-                        Text(path)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-            .frame(minWidth: 320, maxWidth: 360)
-            .background(Color(NSColor.controlBackgroundColor))
-            
+            sidebarView
+                .navigationSplitViewColumnWidth(min: 300, ideal: 320, max: 360)
+                .background(Color.white) // Unified color
+        } content: {
             // MIDDLE: Content
-            VStack(spacing: 0) {
-                // Custom Tab Header
-                HStack(spacing: 0) {
-                    // Tasks Tab
-                    Button(action: { selectedTab = .tasks }) {
-                        ZStack {
-                            Rectangle()
-                                .fill(selectedTab == .tasks ? Color(NSColor.controlBackgroundColor) : Color(NSColor.windowBackgroundColor))
-                            Text("TASKS")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(selectedTab == .tasks ? .primary : .secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Divider()
-                        .frame(width: 1)
-                    
-                    // Library Tab
-                    Button(action: { selectedTab = .library }) {
-                        ZStack {
-                            Rectangle()
-                                .fill(selectedTab == .library ? Color(NSColor.controlBackgroundColor) : Color(NSColor.windowBackgroundColor))
-                            Text("LIBRARY")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(selectedTab == .library ? .primary : .secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Divider().frame(width: 1)
-                    
-                    // Summary Tab
-                    Button(action: { selectedTab = .summary }) {
-                        ZStack {
-                            Rectangle()
-                                .fill(selectedTab == .summary ? Color(NSColor.controlBackgroundColor) : Color(NSColor.windowBackgroundColor))
-                            Text("SUMMARY")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(selectedTab == .summary ? .primary : .secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-                .frame(height: 32) // Fixed height matching system controls
-                
-                Divider()
-                
-                switch selectedTab {
-                case .tasks:
-                    TodoView()
-                case .library:
-                    LibraryView()
-                case .summary:
-                    SummaryView()
-                }
-            }
-            .frame(minWidth: 400)
-            .background(Color(NSColor.windowBackgroundColor))
-            
+            middleContentView
+                .navigationSplitViewColumnWidth(min: 400, ideal: 600) // Increase ideal width for balance
+                .background(Color.appBackground) // Unified color
+        } detail: {
             // RIGHT: Timer & Focus
             rightSidePanel
+                .navigationSplitViewColumnWidth(min: 400, ideal: 600) // Match middle panel for 50/50
+                .background(Color.appBackground) // Unified color
         }
+        .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 1100, minHeight: 700)
         .onAppear {
             calendarManager.fetchEvents(for: todoManager.selectedDate)
@@ -151,112 +46,162 @@ struct ContentView: View {
                 // 1. Save to Calendar with ID and Note
                 calendarManager.savePomodoroEvent(duration: duration, title: taskTitle ?? "Pomodoro Session", taskId: taskId, note: note)
                 
-                // 2. Update Task Time & History (Recursive & Bubble-up)
+                // 2. Update Task Time & History
                 if let id = taskId {
-                    // Update total time (bubbles up to parents)
                     todoManager.addTime(to: id, amount: duration)
-                    
-                    // Add WorkSession (to the specific task only)
-                    let session = WorkSession(
-                        id: UUID(),
-                        startTime: Date().addingTimeInterval(-duration),
-                        endTime: Date(),
-                        duration: duration,
-                        note: note,
-                        rating: rating
-                    )
+                    let session = WorkSession(id: UUID(), startTime: Date().addingTimeInterval(-duration), endTime: Date(), duration: duration, note: note, rating: rating)
                     todoManager.addSession(to: id, session: session)
                 }
             }
         }
         .onChange(of: calendarManager.events) { _ in
-            print("Events changed from CalendarManager, syncing time...")
             // Sync time from Calendar events to Tasks
             var legacyMap: [String: UUID] = [:]
-            
             func addToMapRecursive(_ items: [TodoItem]) {
                 for item in items {
                     legacyMap[item.title] = item.id
-                    if let subs = item.subtasks {
-                        addToMapRecursive(subs)
-                    }
+                    if let subs = item.subtasks { addToMapRecursive(subs) }
                 }
             }
             addToMapRecursive(todoManager.todosForSelectedDate)
-            
             let timeMap = calendarManager.calculateTimeSpent(for: todoManager.selectedDate, legacyTitles: legacyMap)
             todoManager.batchUpdateTime(timeMap)
         }
-        // Note Sheet (Legacy: kept if needed, but Review replaces it mostly)
         .sheet(isPresented: $isNoteSheetPresented) {
             if timerManager.isWorkMode {
                 SessionNoteView(note: $timerManager.currentNote)
             }
         }
-        // Session Review Sheet
         .sheet(isPresented: $timerManager.showReviewSheet) {
-            SessionReviewView()
-                .environmentObject(timerManager)
+            SessionReviewView().environmentObject(timerManager)
         }
     }
     
-    // MARK: - Right Panel (Refactored)
+    // MARK: - Sidebar View
+    var sidebarView: some View {
+        VStack(spacing: 0) {
+            CalendarGridView()
+                .padding(.bottom)
+            
+            Divider()
+            
+            HStack {
+                Text("TODAY")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
+            .padding()
+            
+            CalendarListView()
+            
+            Spacer()
+            
+            Button(action: {
+                todoManager.forceSync()
+            }) {
+                HStack {
+                    Image(systemName: "icloud.and.arrow.up")
+                    Text("Sync Now")
+                }
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.secondary)
+                .padding(8)
+                .background(Color.secondary.opacity(0.1))
+                .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, 20)
+            .help("Force save data to iCloud")
+            .contextMenu {
+                Button { todoManager.selectSyncFolder() } label: {
+                    Label("Change Folder...", systemImage: "folder.badge.gear")
+                }
+                if let path = todoManager.syncPath {
+                    Text(path).font(.caption).foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(.top, 20)
+    }
+    
+    // MARK: - Middle View
+    var middleContentView: some View {
+        VStack(spacing: 0) {
+            // Modern Styled Tab Header
+            HStack(spacing: 20) {
+                ForEach([Tab.tasks, .library, .summary], id: \.self) { tab in
+                    Button(action: { withAnimation { selectedTab = tab } }) {
+                        VStack(spacing: 4) {
+                            Text(tab.rawValue.uppercased())
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(selectedTab == tab ? .primary : .secondary)
+                            
+                            if selectedTab == tab {
+                                Capsule()
+                                    .fill(Color.primary)
+                                    .frame(width: 20, height: 2)
+                                    .matchedGeometryEffect(id: "TabIndicator", in: Namespace().wrappedValue)
+                            } else {
+                                Capsule()
+                                    .fill(Color.clear)
+                                    .frame(width: 20, height: 2)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 12)
+            .background(Color.clear) // Transparent to show main background
+            
+            Divider()
+            
+            switch selectedTab {
+            case .tasks:
+                TodoView()
+            case .library:
+                LibraryView()
+            case .summary:
+                SummaryView()
+            }
+        }
+    }
+    
+    // MARK: - Right Panel (Timer)
     var rightSidePanel: some View {
         VStack {
-            // ... existing right panel ...
-            // (No change needed here)
-
-            // Timer Mode Tabs
-            HStack(spacing: 0) {
-                Button(action: { timerManager.setMode(.pomodoro) }) {
-                    ZStack {
-                        Rectangle()
-                            .fill(timerManager.mode == .pomodoro ? Color(NSColor.controlBackgroundColor) : Color.clear)
-                        Text("POMODORO")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(timerManager.mode == .pomodoro ? .primary : .secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-                .frame(height: 30)
-                
-                Divider().frame(height: 20)
-                
-                Button(action: { timerManager.setMode(.stopwatch) }) {
-                    ZStack {
-                        Rectangle()
-                            .fill(timerManager.mode == .stopwatch ? Color(NSColor.controlBackgroundColor) : Color.clear)
-                        Text("STOPWATCH")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(timerManager.mode == .stopwatch ? .primary : .secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-                .frame(height: 30)
+            // Timer Mode Segmented Control
+            Picker("", selection: $timerManager.mode) { // Removed label key
+                Text("Pomodoro").tag(TimerManager.TimerMode.pomodoro)
+                Text("Stopwatch").tag(TimerManager.TimerMode.stopwatch)
             }
-            .frame(height: 30)
-            .background(Color(NSColor.windowBackgroundColor))
+            .pickerStyle(.segmented)
+            .labelsHidden() // Hide label
+            .padding()
             
-            // Spacer to push Timer up a bit, but not too much
-            Spacer(minLength: 20)
+            Spacer()
             
             if timerManager.mode == .pomodoro {
                 if let task = timerManager.selectedTask {
                     Text(task.title)
-                        .font(.title3)
-                        .fontWeight(.semibold)
+                        .font(.title2)
+                        .fontWeight(.bold)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, 10)
                 } else {
                     Text("Select a task to focus")
                         .font(.callout)
                         .foregroundColor(.secondary)
+                        .padding(.bottom, 10)
                 }
                 
-                // Circular Timer with Editor
+                // Circular Timer
                 CircularTimerView(timerManager: timerManager)
-                    .frame(width: 350, height: 350)
+                    .frame(width: 320, height: 320)
                     
             } else {
                 // Stopwatch View
@@ -264,10 +209,10 @@ struct ContentView: View {
                     Text("STOPWATCH")
                         .font(.headline)
                         .foregroundColor(.secondary)
-                        .tracking(2)
+                        .tracking(4)
                     
                     Text(timerManager.formattedTime())
-                        .font(.system(size: 60, weight: .bold, design: .monospaced))
+                        .font(.system(size: 70, weight: .thin, design: .monospaced))
                         .minimumScaleFactor(0.5)
                         .lineLimit(1)
                         .padding()
@@ -275,76 +220,51 @@ struct ContentView: View {
                 .frame(height: 300)
             }
             
-            HStack(spacing: 30) {
-                // Left: Note / Skip
+            // Timer Controls
+            HStack(spacing: 40) {
+                // Skip / Note
                 if timerManager.mode == .pomodoro && !timerManager.isWorkMode {
                     Button(action: timerManager.skipBreak) {
                         Image(systemName: "forward.end.fill")
                             .font(.title2)
-                            .frame(width: 40, height: 40)
-                            .background(Circle().fill(Color.orange.opacity(0.2)))
-                            .foregroundColor(.orange)
                     }
                     .buttonStyle(.plain)
                     .help("Skip Break")
                 } else if timerManager.isWorkMode {
-                    // Note Button in Work Mode
-                    Button(action: {
-                        isNoteSheetPresented = true
-                    }) {
+                    Button(action: { isNoteSheetPresented = true }) {
                         Image(systemName: "square.and.pencil")
                             .font(.title2)
-                            .frame(width: 40, height: 40)
-                            .background(Circle().fill(Color.secondary.opacity(0.1)))
-                            .foregroundColor(.primary)
                     }
                     .buttonStyle(.plain)
-                    .help("Write Session Note")
-                } else {
-                     // Placeholder to balance layout if needed, or just nothing.
-                     // The user asked for "Left", "Center", "Right".
-                     // If we want perfect centering of the Start button, we might need a dummy spacer or proper alignment.
-                     // But HStack spacing 30 is simple. Let's just put it here.
-                     // If not in work mode (e.g. Stopwatch), maybe no note button?
-                     // Stopwatch has no note/skip logic usually.
-                     // Let's stick to valid logic. `isWorkMode` defaults to true/false.
-                     // Actually Stopwatch mode relies on `timerManager.mode`.
-                     // If Stopwatch, neither condition might be true?
-                     // `isWorkMode` is boolean.
-                     // If stopwatch, `isWorkMode` might be irrelevant.
-                     // Let's just move the code block as is.
-                     
-                     // Wait, if Stopwatch, what happens?
-                     // In original code:
-                     // if timerManager.mode == .pomodoro && !timerManager.isWorkMode { ... }
-                     // else if timerManager.isWorkMode { ... }
-                     
-                     // If mode == .stopwatch, !timerManager.isWorkMode might be false?
-                     // Let's assume the previous logic was correct for visibility.
+                    .help("Write Note")
                 }
-
-                // Center: Start/Pause
+                
+                // Play / Pause (Big Button)
                 Button(action: {
                     timerManager.isRunning ? timerManager.pauseTimer() : timerManager.startTimer()
                 }) {
-                    Image(systemName: timerManager.isRunning ? "pause.fill" : "play.fill")
-                        .font(.title)
-                        .frame(width: 50, height: 50)
-                        .background(Circle().fill(Color.primary.opacity(0.1)))
+                    ZStack {
+                        Circle()
+                            .fill(LinearGradient(colors: [.indigo, .blue], startPoint: .top, endPoint: .bottom))
+                            .frame(width: 70, height: 70)
+                            .shadow(radius: 5)
+                        
+                        Image(systemName: timerManager.isRunning ? "pause.fill" : "play.fill")
+                            .font(.title)
+                            .foregroundColor(.white)
+                    }
                 }
                 .buttonStyle(.plain)
-                .keyboardShortcut(.space, modifiers: []) // Spacebar to toggle
+                .keyboardShortcut(.space, modifiers: [])
                 
-                // Right: Reset
+                // Reset
                 Button(action: timerManager.resetTimer) {
                     Image(systemName: "arrow.counterclockwise")
-                        .font(.title2)
-                        .frame(width: 40, height: 40)
-                        .background(Circle().fill(Color.secondary.opacity(0.1)))
+                    .font(.title2)
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.top, 20)
+            .padding(.top, 30)
             
             Spacer()
             
@@ -352,8 +272,6 @@ struct ContentView: View {
                 .padding(.bottom, 30)
                 .padding(.horizontal, 16)
         }
-        .frame(minWidth: 300)
-        .background(Color(NSColor.windowBackgroundColor))
     }
 }
 
@@ -361,6 +279,31 @@ struct ContentView: View {
 
 struct CalendarListView: View {
     @EnvironmentObject var calendarManager: CalendarManager
+    @EnvironmentObject var todoManager: TodoManager // Added for Task Logic
+    
+    // Helper to resolve Task Details
+    private func resolveTask(from event: EKEvent) -> (title: String, category: String?, isSubtask: Bool) {
+        if let urlString = event.url?.absoluteString,
+           urlString.starts(with: "pomocal://task/"),
+           let idString = urlString.components(separatedBy: "/").last,
+           let uuid = UUID(uuidString: idString) {
+            
+            // Search in TodoManager
+            // 1. Check Top Level
+            if let task = todoManager.todos.first(where: { $0.id == uuid }) {
+                // Emoji Logic: Use user-selected emoji if available, otherwise random fallback
+                let emojiIcon = task.emoji ?? randomEmoji(for: task.title)
+                let displayTitle = "\(emojiIcon) \(task.title)"
+                return (displayTitle, task.category, false)
+            }
+            
+            // 2. Check Subtasks (recursively) - mark as subtask to hide
+            return (event.title, nil, true)
+        }
+        
+        // Legacy or External Events: Show them as top-level
+        return (event.title, nil, false)
+    }
     
     var body: some View {
         ScrollView {
@@ -371,32 +314,54 @@ struct CalendarListView: View {
                     Button("Grant Access") { calendarManager.requestAccess() }
                 } else {
                     ForEach(calendarManager.events, id: \.eventIdentifier) { event in
-                        HStack(spacing: 12) {
-                            Capsule()
-                                .fill(Color(cgColor: event.calendar.cgColor))
-                                .frame(width: 4)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(event.title)
-                                    .font(.callout)
-                                    .fontWeight(.medium)
-                                Text(event.startDate, style: .time)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                        let taskInfo = resolveTask(from: event)
+                        
+                        if !taskInfo.isSubtask { // FILTER: Hide subtasks
+                            HStack(spacing: 12) {
+                                // Task Color Marker (Use Category Color if available, else random based on title)
+                                Capsule()
+                                    .fill(taskInfo.category != nil ? categoryColor(for: taskInfo.category!) : categoryColor(for: event.title ?? ""))
+                                    .frame(width: 4)
+                                    .frame(maxHeight: .infinity)
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    // Title: [Emoji] Task Name
+                                    Text(taskInfo.title)
+                                        .font(.callout)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.primary)
+                                        .fixedSize(horizontal: false, vertical: true) // Allow wrapping
+                                    
+                                    // Time: Start ~ End
+                                    Text("\(event.startDate, formatter: timeFormatter) ~ \(event.endDate, formatter: timeFormatter)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                // Category Badge (Right)
+                                if let category = taskInfo.category {
+                                    Text(category)
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Capsule().fill(categoryColor(for: category))) // Unique color per category
+                                }
                             }
-                            Spacer()
-                        }
-                        .padding(10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.secondary.opacity(0.05))
-                        )
-                        .padding(.horizontal)
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                calendarManager.deleteEvent(event)
-                            } label: {
-                                Label("Delete Event", systemImage: "trash")
+                            .padding(12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color(NSColor.controlBackgroundColor)) // Slight contrast against white sidebar
+                            )
+                            .padding(.horizontal)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    calendarManager.deleteEvent(event)
+                                } label: {
+                                    Label("Delete Event", systemImage: "trash")
+                                }
                             }
                         }
                     }
@@ -404,6 +369,13 @@ struct CalendarListView: View {
             }
         }
     }
+    
+    private let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        f.dateStyle = .none
+        return f
+    }()
 }
 
 // Helper Struct for Flattened List
@@ -419,6 +391,7 @@ struct TodoView: View {
     @EnvironmentObject var calendarManager: CalendarManager
     @State private var isAddSheetPresented = false
     @State private var showSwitchAlert = false
+    @State private var showBreakSkipAlert = false
     @State private var pendingTask: TodoItem?
     
     // For Editing
@@ -459,6 +432,16 @@ struct TodoView: View {
                     .font(.title)
                     .fontWeight(.bold)
                 Spacer()
+                
+                // Category Management Button
+                Button(action: { isCategoryManagerPresented = true }) {
+                    Image(systemName: "folder.badge.gear")
+                        .font(.title3)
+                }
+                .buttonStyle(.plain)
+                .help("Manage Categories")
+                .padding(.trailing, 8)
+                
                 Button(action: { isAddSheetPresented = true }) {
                     Label("Add Task", systemImage: "plus")
                 }
@@ -544,6 +527,20 @@ struct TodoView: View {
                 if let task = pendingTask {
                     timerManager.resetTimer()
                     timerManager.selectedTask = task
+                }
+            },
+            secondaryButton: .cancel()
+        )
+    }
+    .alert(isPresented: $showBreakSkipAlert) {
+        Alert(
+            title: Text("Skip Break?"),
+            message: Text("Do you want to skip the break and start working on \(pendingTask?.title ?? "this task")?"),
+            primaryButton: .default(Text("Start Work")) {
+                if let task = pendingTask {
+                    timerManager.skipBreak() // Switches to Work
+                    timerManager.selectedTask = task
+                    timerManager.resetTimer() // Ensure clean start
                 }
             },
             secondaryButton: .cancel()
@@ -647,14 +644,19 @@ private func updateSubtasks(in tasks: inout [TodoItem], targetId: UUID, update: 
 }
 
 private func selectTask(_ item: TodoItem) {
-    if timerManager.isRunning || (timerManager.isWorkMode && timerManager.timeRemaining < 25*60) {
-         if timerManager.isRunning {
-             pendingTask = item
-             showSwitchAlert = true
-         } else {
-             timerManager.selectedTask = item
-         }
+    if timerManager.isRunning {
+        pendingTask = item
+        showSwitchAlert = true
+    } else if !timerManager.isWorkMode {
+        // Break Mode: Prompt to skip
+        pendingTask = item
+        showBreakSkipAlert = true
+    } else if timerManager.isWorkMode && timerManager.timeRemaining < 25*60 && timerManager.timeRemaining > 0 {
+         // Paused work with progress
+         pendingTask = item
+         showSwitchAlert = true
     } else {
+        // Safe to switch
         timerManager.selectedTask = item
     }
 }

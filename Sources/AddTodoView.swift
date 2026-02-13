@@ -5,6 +5,8 @@ struct AddTodoView: View {
     @Environment(\.dismiss) var dismiss
     
     @State private var title = ""
+    @State private var selectedEmoji = "📝" // Default
+    @State private var isEmojiPickerPresented = false
     @State private var selectedCategory = ""
     @State private var newCategory = ""
     @State private var isAddingCategory = false
@@ -29,8 +31,24 @@ struct AddTodoView: View {
                     .font(.caption)
                     .fontWeight(.bold)
                     .foregroundColor(.secondary)
-                TextField("What are you studying?", text: $title)
-                    .textFieldStyle(.roundedBorder)
+                
+                HStack {
+                    // Emoji Picker (Notion Style)
+                    Button(action: { isEmojiPickerPresented = true }) {
+                        Text(selectedEmoji)
+                            .font(.title2)
+                            .frame(width: 40, height: 30)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $isEmojiPickerPresented, arrowEdge: .bottom) {
+                        EmojiPickerView(selectedEmoji: $selectedEmoji)
+                    }
+                    
+                    TextField("What are you studying?", text: $title)
+                        .textFieldStyle(.roundedBorder)
+                }
             }
             
             // Category Selection
@@ -249,7 +267,8 @@ struct AddTodoView: View {
             date: todoManager.selectedDate,
             category: selectedCategory.isEmpty ? nil : selectedCategory,
             book: selectedBook,
-            goalRange: goalString
+            goalRange: goalString,
+            emoji: selectedEmoji
         )
         todoManager.addTodo(newItem)
         dismiss()

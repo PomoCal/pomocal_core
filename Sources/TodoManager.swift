@@ -34,12 +34,13 @@ struct TodoItem: Identifiable, Codable, Equatable {
     var goalRange: String?
     var actualRange: String?
     var timeSpent: TimeInterval = 0 // In seconds
+    var emoji: String? // User selected emoji
     
     // Subtasks & Sessions
     var subtasks: [TodoItem]?
     var sessions: [WorkSession]?
     
-    init(title: String, date: Date = Date(), category: String? = nil, book: BookInfo? = nil, goalRange: String? = nil, timeSpent: TimeInterval = 0) {
+    init(title: String, date: Date = Date(), category: String? = nil, book: BookInfo? = nil, goalRange: String? = nil, timeSpent: TimeInterval = 0, emoji: String? = nil) {
         self.id = UUID()
         self.title = title
         self.isCompleted = false
@@ -48,6 +49,7 @@ struct TodoItem: Identifiable, Codable, Equatable {
         self.book = book
         self.goalRange = goalRange
         self.timeSpent = timeSpent
+        self.emoji = emoji
         self.subtasks = []
         self.sessions = []
     }
