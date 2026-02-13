@@ -6,63 +6,71 @@ struct DDayView: View {
     @State private var dDayToEdit: DDay?
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
             HStack {
-                Text("D-DAY")
-                    .font(.caption)
+                Text("D-Day")
+                    .font(.largeTitle)
                     .fontWeight(.bold)
-                    .foregroundColor(.secondary)
                 
                 Spacer()
                 
                 Button(action: { showingAddSheet = true }) {
-                    Image(systemName: "plus")
-                        .font(.caption)
+                    Label("D-Day", systemImage: "plus")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
             }
-            .padding(.horizontal)
+            .padding()
             
-            if manager.dDays.isEmpty {
-                Text("No D-Days")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal)
-            } else {
-                ForEach(manager.dDays) { dDay in
-                    let days = manager.daysRemaining(to: dDay.date)
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(dDay.title)
-                                .font(.caption)
-                                .fontWeight(.medium)
-                            Text(formatDate(dDay.date))
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Spacer()
-                        
-                        Text(formatDDay(days))
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .foregroundColor(colorForDDay(days))
-                    }
-                    .padding(8)
-                    .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-                    .cornerRadius(8)
-                    .padding(.horizontal)
-                    .contextMenu {
-                        Button("Edit") {
-                            dDayToEdit = dDay
-                        }
-                        Button("Delete", role: .destructive) {
-                            manager.deleteDDay(dDay)
+            Divider()
+            
+            ScrollView {
+                VStack(spacing: 12) {
+                    if manager.dDays.isEmpty {
+                        Text("No D-Days")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                            .padding(.top, 40)
+                    } else {
+                        ForEach(manager.dDays) { dDay in
+                            let days = manager.daysRemaining(to: dDay.date)
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(dDay.title)
+                                        .font(.headline)
+                                        .fontWeight(.medium)
+                                    Text(formatDate(dDay.date))
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                Text(formatDDay(days))
+                                    .font(.system(size: 24, weight: .bold, design: .rounded)) // Larger font
+                                    .foregroundColor(colorForDDay(days))
+                            }
+                            .padding(12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color(NSColor.controlBackgroundColor))
+                            )
+                            .contextMenu {
+                                Button("Edit") {
+                                    dDayToEdit = dDay
+                                }
+                                Button("Delete", role: .destructive) {
+                                    manager.deleteDDay(dDay)
+                                }
+                            }
                         }
                     }
                 }
+                .padding()
             }
         }
-        .padding(.bottom)
+        .frame(minWidth: 400, minHeight: 500)
         .sheet(isPresented: $showingAddSheet) {
             DDayEditView(manager: manager)
         }
@@ -78,8 +86,11 @@ struct DDayView: View {
     }
     
     private func colorForDDay(_ days: Int) -> Color {
-        if days == 0 { return .red }
-        if days > 0 && days <= 7 { return .orange }
+        // 0 to 7 days (Upcoming Week): Red
+        if days >= 0 && days <= 7 { return .red }
+        // 8 to 14 days (Upcoming 2 Weeks): Green
+        if days > 7 && days <= 14 { return .green }
+        // Otherwise: Default
         return .primary
     }
     
