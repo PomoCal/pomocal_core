@@ -14,6 +14,10 @@ struct ContentView: View {
     @State private var showModeSwitchAlert = false
     @State private var pendingMode: TimerManager.TimerMode?
     
+    // D-Day Manager
+    @StateObject private var dDayManager = DDayManager()
+    @State private var isDDaySheetPresented = false
+    
     enum Tab: String, CaseIterable {
         case tasks = "Tasks"
         case library = "Library"
@@ -85,6 +89,10 @@ struct ContentView: View {
         .sheet(isPresented: $timerManager.showReviewSheet) {
             SessionReviewView().environmentObject(timerManager)
         }
+        .sheet(isPresented: $isDDaySheetPresented) {
+            DDayView(manager: dDayManager)
+                .frame(minWidth: 400, minHeight: 500)
+        }
         .alert(isPresented: $showModeSwitchAlert) {
             Alert(
                 title: Text("Switch Mode?"),
@@ -120,31 +128,55 @@ struct ContentView: View {
             
             Spacer()
             
-            Button(action: {
-                todoManager.forceSync()
-            }) {
-                HStack {
-                    Image(systemName: "icloud.and.arrow.up")
-                    Text("Sync Now")
+            HStack(spacing: 12) {
+                // Sync Button (Left)
+                Button(action: {
+                    todoManager.forceSync()
+                }) {
+                    HStack {
+                        Image(systemName: "icloud.and.arrow.up")
+                        Text("Sync")
+                    }
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+                    .padding(8)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(8)
                 }
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.secondary)
-                .padding(8)
-                .background(Color.secondary.opacity(0.1))
-                .cornerRadius(8)
+                .buttonStyle(.plain)
+                .help("Force save data to iCloud")
+                .contextMenu {
+                    Button { todoManager.selectSyncFolder() } label: {
+                        Label("Change Folder...", systemImage: "folder.badge.gear")
+                    }
+                    if let path = todoManager.syncPath {
+                        Text(path).font(.caption).foregroundColor(.secondary)
+                    }
+                }
+                
+                // D-Day Button (Right)
+                Button(action: {
+                    isDDaySheetPresented = true
+                }) {
+                    HStack {
+                        Image(systemName: "calendar.badge.clock")
+                        Text("D-Day")
+                    }
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+                    .padding(8)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .help("Manage D-Days")
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal)
             .padding(.bottom, 20)
-            .help("Force save data to iCloud")
-            .contextMenu {
-                Button { todoManager.selectSyncFolder() } label: {
-                    Label("Change Folder...", systemImage: "folder.badge.gear")
-                }
-                if let path = todoManager.syncPath {
-                    Text(path).font(.caption).foregroundColor(.secondary)
-                }
-            }
         }
         .padding(.top, 20)
     }
@@ -714,19 +746,26 @@ private func updateSubtasks(in tasks: inout [TodoItem], targetId: UUID, update: 
     return false
 }
 
-private func selectTask(_ item: TodoItem) {
-    if timerManager.isRunning {
-        pendingTask = item
-        showSwitchAlert = true
-    } else if !timerManager.isWorkMode {
-        // Break Mode: Prompt to skip
-        pendingTask = item
-        showBreakSkipAlert = true
-    } else if timerManager.isWorkMode && timerManager.timeRemaining < 25*60 && timerManager.timeRemaining > 0 {
-         // Paused work with progress
-         pendingTask = item
-         showSwitchAlert = true
-    } else {
+    private func selectTask(_ item: TodoItem) {
+        // Safe Switch Logic:
+        // 1. Is Timer Running?
+        // 2. Is there unsaved progress? (Pomodoro started OR Stopwatch started)
+        
+        let isPomodoroActive = timerManager.mode == .pomodoro && 
+                               timerManager.progress > 0 && 
+                               timerManager.timeRemaining > 0
+        
+        let isStopwatchActive = timerManager.mode == .stopwatch && timerManager.stopwatchSeconds > 0
+        
+        if timerManager.isRunning || isPomodoroActive || isStopwatchActive {
+            // Warn if switching would lose progress
+            pendingTask = item
+            showSwitchAlert = true
+        } else if !timerManager.isWorkMode && timerManager.mode == .pomodoro {
+            // Break Mode: Prompt to skip
+            pendingTask = item
+            showBreakSkipAlert = true
+        } else {
             // Safe to switch
             timerManager.selectedTask = item
         }
