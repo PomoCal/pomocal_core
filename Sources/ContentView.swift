@@ -109,6 +109,13 @@ struct ContentView: View {
     }
     
     // MARK: - Sidebar View
+    private var dateHeaderFormatter: DateFormatter {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }
+    
     var sidebarView: some View {
         VStack(spacing: 0) {
             CalendarGridView()
@@ -117,7 +124,7 @@ struct ContentView: View {
             Divider()
             
             HStack {
-                Text("TODAY")
+                Text(Calendar.current.isDateInToday(todoManager.selectedDate) ? "TODAY" : dateHeaderFormatter.string(from: todoManager.selectedDate).uppercased())
                     .font(.caption)
                     .fontWeight(.bold)
                     .foregroundColor(.secondary)
@@ -304,10 +311,7 @@ struct ContentView: View {
                         .foregroundColor(.secondary)
                         .tracking(4)
                     
-                    Text(timerManager.formattedTime())
-                        .font(.system(size: 70, weight: .thin, design: .monospaced))
-                        .minimumScaleFactor(0.5)
-                        .lineLimit(1)
+                    FlipClockView(seconds: Int(timerManager.stopwatchSeconds), showHours: true, fontSize: 70, color: .primary)
                         .padding()
                 }
                 .frame(height: 300)

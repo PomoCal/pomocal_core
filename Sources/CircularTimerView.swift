@@ -5,79 +5,60 @@ struct CircularTimerView: View {
     @State private var isHovering = false
     
     var body: some View {
-        ZStack {
-            // Background Ring
-            Circle()
-                .stroke(lineWidth: 20)
-                .opacity(0.1)
-                .foregroundColor(Color.primary)
-            
-            // Progress Ring with Glow and Gradient
-            Circle()
-                .trim(from: 0.0, to: CGFloat(min(timerManager.progress, 1.0)))
-                .stroke(
-                    timerManager.isWorkMode ? Color.focusGradient : Color.breakGradient,
-                    style: StrokeStyle(lineWidth: 20, lineCap: .round, lineJoin: .round)
-                )
-                .rotationEffect(Angle(degrees: 270.0))
-                .shadow(color: (timerManager.isWorkMode ? Color.indigo : Color.teal).opacity(0.6), radius: 15, x: 0, y: 0)
-                .animation(.linear(duration: 1.0), value: timerManager.progress)
-            
-            // Time Text & Controls
-            VStack(spacing: 10) {
-                if !timerManager.isRunning && timerManager.mode == .pomodoro {
-                    // Time Editor Mode
-                    HStack(spacing: 5) {
-                        // Minutes
-                        TimeComponentEditor(
-                            value: Binding(
-                                get: { Int(timerManager.timeRemaining) / 60 },
-                                set: { minute in
-                                    let seconds = Int(timerManager.timeRemaining) % 60
-                                    let newTotal = TimeInterval(minute * 60 + seconds)
-                                    timerManager.updateTimeRemaining(newTotal)
-                                }
-                            ),
-                            range: 0...99,
-                            step: 1
-                        )
-                        
-                        Text(":")
-                            .font(.system(size: 60, weight: .bold, design: .rounded))
-                            .offset(y: -4)
-                            .foregroundColor(.secondary)
-                        
-                        // Seconds
-                        TimeComponentEditor(
-                            value: Binding(
-                                get: { Int(timerManager.timeRemaining) % 60 },
-                                set: { second in
-                                    let minutes = Int(timerManager.timeRemaining) / 60
-                                    let newTotal = TimeInterval(minutes * 60 + second)
-                                    timerManager.updateTimeRemaining(newTotal)
-                                }
-                            ),
-                            range: 0...59,
-                            step: 10
-                        )
-                    }
-                } else {
-                    // Display Mode
-                    Text(timerManager.formattedTime())
-                        .font(.system(size: 70, weight: .bold, design: .rounded))
-                        .minimumScaleFactor(0.5)
-                        .lineLimit(1)
-                        .foregroundColor(.primary)
-                        .animation(.default, value: timerManager.timeRemaining)
+        VStack(spacing: 20) {
+            // Time Display / Editor
+            if !timerManager.isRunning && timerManager.mode == .pomodoro {
+                // Time Editor Mode
+                HStack(spacing: 5) {
+                    // Minutes
+                    TimeComponentEditor(
+                        value: Binding(
+                            get: { Int(timerManager.timeRemaining) / 60 },
+                            set: { minute in
+                                let seconds = Int(timerManager.timeRemaining) % 60
+                                let newTotal = TimeInterval(minute * 60 + seconds)
+                                timerManager.updateTimeRemaining(newTotal)
+                            }
+                        ),
+                        range: 0...99,
+                        step: 1
+                    )
+                    
+                    Text(":")
+                        .font(.system(size: 80, weight: .bold, design: .rounded))
+                        .offset(y: -8)
+                        .foregroundColor(.secondary)
+                    
+                    // Seconds
+                    TimeComponentEditor(
+                        value: Binding(
+                            get: { Int(timerManager.timeRemaining) % 60 },
+                            set: { second in
+                                let minutes = Int(timerManager.timeRemaining) / 60
+                                let newTotal = TimeInterval(minutes * 60 + second)
+                                timerManager.updateTimeRemaining(newTotal)
+                            }
+                        ),
+                        range: 0...59,
+                        step: 10
+                    )
                 }
-                
-                Text(timerManager.isWorkMode ? "FOCUS" : "BREAK")
-                    .font(.caption)
-                    .fontWeight(.bold)
-                    .foregroundColor(.secondary)
-                    .tracking(4)
-                    .opacity(0.8)
+            } else {
+                // Display Mode (Running or Break)
+                FlipClockView(
+                    seconds: Int(timerManager.timeRemaining),
+                    showHours: false,
+                    fontSize: 100,
+                    color: .primary
+                )
             }
+            
+            Text(timerManager.isWorkMode ? "FOCUS" : "BREAK")
+                .font(.title3)
+                .fontWeight(.bold)
+                .foregroundColor(.secondary)
+                .tracking(6)
+                .opacity(0.8)
         }
         .padding(40)
     }

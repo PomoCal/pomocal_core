@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 struct CalendarDay: Identifiable {
-    let id = UUID()
+    let id: String
     let date: Date?
     let isCurrentMonth: Bool
 }
@@ -15,10 +15,8 @@ struct CalendarGridView: View {
     let daysInWeek = 7
     let columns = Array(repeating: GridItem(.flexible()), count: 7)
     
-    // ... (rest of the file until body) ...
+// ...
 
-
-    
     private var currentMonthDate: Date {
         Calendar.current.date(byAdding: .month, value: monthOffset, to: Date()) ?? Date()
     }
@@ -37,14 +35,15 @@ struct CalendarGridView: View {
         var days: [CalendarDay] = []
         
         // Add padding
-        for _ in 0..<paddingDays {
-            days.append(CalendarDay(date: nil, isCurrentMonth: false))
+        for i in 0..<paddingDays {
+            days.append(CalendarDay(id: "pad-\(i)", date: nil, isCurrentMonth: false))
         }
         
         // Add days
         for day in 1...range.count {
             if let date = calendar.date(byAdding: .day, value: day - 1, to: firstDayOfMonth) {
-                days.append(CalendarDay(date: date, isCurrentMonth: true))
+                let id = calendar.startOfDay(for: date).description 
+                days.append(CalendarDay(id: id, date: date, isCurrentMonth: true))
             }
         }
         
