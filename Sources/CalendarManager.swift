@@ -146,6 +146,7 @@ class CalendarManager: ObservableObject {
             event.title = title
         }
         
+        event.timeZone = .current // Fix: Force local timezone to prevent UTC shift
         event.startDate = Date().addingTimeInterval(-duration)
         event.endDate = Date()
         
@@ -252,6 +253,7 @@ class CalendarManager: ObservableObject {
         event.startDate = Calendar.current.startOfDay(for: date)
         event.endDate = Calendar.current.startOfDay(for: date).addingTimeInterval(86400) // All Day
         event.isAllDay = true
+        event.timeZone = .current // Fix: Force local timezone
         event.calendar = calendar
         event.url = url
         event.notes = "D-Day for \(title)"
@@ -278,6 +280,7 @@ class CalendarManager: ObservableObject {
         event.startDate = Calendar.current.startOfDay(for: date)
         event.endDate = Calendar.current.startOfDay(for: date).addingTimeInterval(86400)
         event.isAllDay = true
+        event.timeZone = .current // Fix: Force local timezone
         event.calendar = calendar
         event.url = URL(string: "pomodday://event/\(dDayId.uuidString)")
         
