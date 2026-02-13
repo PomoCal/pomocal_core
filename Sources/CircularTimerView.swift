@@ -72,49 +72,70 @@ struct TimeComponentEditor: View {
     @State private var isHovering = false
     
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 4) {
+            // Up Button
             Button(action: {
                 var newValue = value + step
-                if newValue > range.upperBound { newValue = range.lowerBound } // Wrap around
+                if newValue > range.upperBound { newValue = range.lowerBound }
                 value = newValue
             }) {
                 Image(systemName: "chevron.up")
-                    .font(.headline)
+                    .font(.caption.bold())
                     .foregroundColor(.secondary)
-                    .frame(height: 20)
+                    .frame(height: 10)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .opacity(isHovering ? 1.0 : 0.0) // Show on hover
+            .opacity(isHovering ? 1.0 : 0.0) 
             
-            TextField("", text: Binding(
-                get: { String(format: "%02d", value) },
-                set: { newValue in
-                    if let intValue = Int(newValue) {
-                         // Allow typing, clamp on commit or processing if needed, 
-                         // but for live update let's clamp immediately
-                         if intValue >= range.lowerBound && intValue <= range.upperBound {
-                             value = intValue
-                         } else if intValue > range.upperBound {
-                             value = range.upperBound
-                         }
-                    }
+            // Card Input
+            ZStack {
+                // Background Card
+                RoundedRectangle(cornerRadius: 12) // Slightly larger radius for larger card
+                    .fill(Color.white)
+                    .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
+                
+                // Split Line
+                VStack {
+                    Spacer()
+                    Divider().background(Color.black.opacity(0.1))
+                    Spacer()
                 }
-            ))
-            .font(.system(size: 60, weight: .bold, design: .rounded))
-            .multilineTextAlignment(.center)
-            .textFieldStyle(.plain)
-            .frame(width: 80, height: 70)
-
+                
+                // TextField
+                TextField("", text: Binding(
+                    get: { String(format: "%02d", value) },
+                    set: { newValue in
+                        if let intValue = Int(newValue) {
+                             if intValue >= range.lowerBound && intValue <= range.upperBound {
+                                 value = intValue
+                             } else if intValue > range.upperBound {
+                                 value = range.upperBound // Clamp
+                             }
+                        }
+                    }
+                ))
+                .font(.system(size: 100, weight: .bold, design: .monospaced)) // Match FlipClock font
+                .multilineTextAlignment(.center)
+                .textFieldStyle(.plain)
+                .foregroundColor(.black) // Ensure black text
+            }
+            .frame(width: 176, height: 100) // 2 digits wide (80*2 + spacing)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+            )
+            
+            // Down Button
             Button(action: {
                 var newValue = value - step
-                if newValue < range.lowerBound { newValue = range.upperBound } // Wrap around
+                if newValue < range.lowerBound { newValue = range.upperBound }
                 value = newValue
             }) {
                 Image(systemName: "chevron.down")
-                    .font(.headline)
+                    .font(.caption.bold())
                     .foregroundColor(.secondary)
-                    .frame(height: 20)
+                    .frame(height: 10)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

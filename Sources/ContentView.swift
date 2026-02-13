@@ -38,11 +38,11 @@ struct ContentView: View {
         } detail: {
             // RIGHT: Timer & Focus
             rightSidePanel
-                .navigationSplitViewColumnWidth(min: 400, ideal: 600) // Match middle panel for 50/50
+                .navigationSplitViewColumnWidth(min: 500, ideal: 600) // Match middle panel for 50/50
                 .background(Color.appBackground) // Unified color
         }
         .navigationSplitViewStyle(.balanced)
-        .frame(minWidth: 1100, minHeight: 700)
+        .frame(minWidth: 1300, minHeight: 700)
         .onAppear {
             calendarManager.fetchEvents(for: todoManager.selectedDate)
         }

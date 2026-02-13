@@ -12,7 +12,7 @@ struct FlipClockView: View {
     var secs: Int { seconds % 60 }
     
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             if showHours {
                 FlipSection(value: hours, fontSize: fontSize, color: color)
                 Separator(fontSize: fontSize)
@@ -22,8 +22,7 @@ struct FlipClockView: View {
             FlipSection(value: secs, fontSize: fontSize, color: color)
         }
         .padding(12)
-        .background(Color.black.opacity(0.05))
-        .cornerRadius(12)
+        // No background, transparent container
     }
 }
 
@@ -48,7 +47,7 @@ private struct FlipSection: View {
     var ones: Int { value % 10 }
     
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 4) { // Slightly increased spacing between digits locally
             FlipDigit(value: tens, fontSize: fontSize, color: color)
             FlipDigit(value: ones, fontSize: fontSize, color: color)
         }
@@ -84,12 +83,9 @@ private struct FlipDigit: View {
             }
             
             // Animating Flap Layer
-            // It sits on top of the Top Static Half and rotates down to cover Bottom Static Half.
             VStack(spacing: 0) {
                 Flipper(current: currentValue, next: nextValue, fontSize: fontSize, color: color, rotation: rotation)
-                // Spacer to fill the bottom half space so ZStack alignment works if needed, 
-                // but since Flipper behaves as a Top Half anchored at bottom, we align Top.
-                Spacer().frame(height: fontSize * 0.5)
+                Spacer().frame(height: fontSize * 0.5) // Align Flipper to top half
             }
         }
         .onChange(of: value) { newValue in
@@ -131,8 +127,6 @@ private struct Flipper: View {
             anchor: .bottom,
             perspective: 0.5
         )
-        // No offset needed if we structure layout correctly.
-        // It is a TopHalf view.
     }
 }
 
@@ -144,43 +138,46 @@ private struct HalfDigit: View {
     
     enum HalfType { case top, bottom }
     
-    var cardWidth: CGFloat { fontSize * 0.7 }
+    var cardWidth: CGFloat { fontSize * 0.8 } // Wider cards
     var cardHeight: CGFloat { fontSize * 1.0 }
     var halfHeight: CGFloat { cardHeight * 0.5 }
     var cornerRadius: CGFloat = 6
     
     var body: some View {
-        // We create a view of size (cardWidth x halfHeight)
-        // that shows either the top or bottom half of the digit.
-        
-        ZStack {
+        // Container for the half-card
+        ZStack(alignment: type == .top ? .top : .bottom) {
             // Background Card
             RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(Color(NSColor.controlBackgroundColor))
+                .fill(Color.white)
+                .frame(width: cardWidth, height: halfHeight)
             
-            // Text
+            // Text - Full Height, aligned to show correct half
+            // We force the text to be full card size and align it within the half-height container
             Text("\(value)")
                 .font(.system(size: fontSize, weight: .bold, design: .monospaced))
                 .foregroundColor(color)
-                // Offset the text to show the correct half
-                .offset(y: type == .top ? halfHeight * 0.5 : -halfHeight * 0.5)
+                .frame(width: cardWidth, height: cardHeight, alignment: .center)
+                // Use offset if alignment within ZStack doesn't clip correctly?
+                // ZStack alignment aligns the CENTER of the text frame to the alignment point of the Stack?
+                // No, .top alignment aligns the Top edge of Text to Top edge of Stack.
+                // If Stack height is halfHeight, and Text height is cardHeight.
+                // Top Alignment: Top edges match. Bottom of text hanging out (clipped). Correct for Top Half.
+                // Bottom Alignment: Bottom edges match. Top of text hanging out (clipped). Correct for Bottom Half.
         }
-        .frame(width: cardWidth, height: halfHeight)
-        .clipped() // Clip content to the half-height frame
+        .frame(width: cardWidth, height: halfHeight, alignment: type == .top ? .top : .bottom)
+        .clipped() // Clip the overflowing half of the text
         .overlay(
-            // Border / Stroke
             RoundedRectangle(cornerRadius: cornerRadius)
                 .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
-        // Divider line simulation
         .overlay(
             VStack {
                 if type == .top {
                     Spacer()
-                    Divider().background(Color.black.opacity(0.3))
+                    Divider().background(Color.black.opacity(0.1))
                 } else {
-                    Divider().background(Color.black.opacity(0.3))
+                    Divider().background(Color.black.opacity(0.1)) // Subtle line
                     Spacer()
                 }
             }
