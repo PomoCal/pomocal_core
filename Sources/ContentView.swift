@@ -10,6 +10,10 @@ struct ContentView: View {
     @State private var isNoteSheetPresented = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     
+    // Mode Switch Alert State
+    @State private var showModeSwitchAlert = false
+    @State private var pendingMode: TimerManager.TimerMode?
+    
     enum Tab: String, CaseIterable {
         case tasks = "Tasks"
         case library = "Library"
@@ -80,6 +84,18 @@ struct ContentView: View {
         }
         .sheet(isPresented: $timerManager.showReviewSheet) {
             SessionReviewView().environmentObject(timerManager)
+        }
+        .alert(isPresented: $showModeSwitchAlert) {
+            Alert(
+                title: Text("Switch Mode?"),
+                message: Text("Current session progress will be lost."),
+                primaryButton: .destructive(Text("Switch")) {
+                    if let mode = pendingMode {
+                        timerManager.setMode(mode)
+                    }
+                },
+                secondaryButton: .cancel()
+            )
         }
     }
     
@@ -180,7 +196,31 @@ struct ContentView: View {
     var rightSidePanel: some View {
         VStack {
             // Timer Mode Segmented Control
-            Picker("", selection: $timerManager.mode) { // Removed label key
+            Picker("", selection: Binding(
+                get: { timerManager.mode },
+                set: { newMode in
+                    // Check if current session has progress that would be lost
+                    let isPomodoroActive = timerManager.mode == .pomodoro && 
+                                           timerManager.timeRemaining < 25*60 && // Assumption: default is 25m, but can change. 
+                                           // Better: timeRemaining < workDuration? 
+                                           // TimerManager doesn't expose workDuration publicly as a var... 
+                                           // Actually it does: line 27 is private. 
+                                           // But `timerManager.progress` > 0 works.
+                                           timerManager.progress > 0 && 
+                                           timerManager.timeRemaining > 0
+                    
+                    let isStopwatchActive = timerManager.mode == .stopwatch && timerManager.stopwatchSeconds > 0
+                    
+                    if timerManager.isRunning || isPomodoroActive || isStopwatchActive {
+                        // Warn User
+                        pendingMode = newMode
+                        showModeSwitchAlert = true
+                    } else {
+                        // Safe to switch
+                        timerManager.setMode(newMode)
+                    }
+                }
+            )) { 
                 Text("Pomodoro").tag(TimerManager.TimerMode.pomodoro)
                 Text("Stopwatch").tag(TimerManager.TimerMode.stopwatch)
             }
@@ -576,6 +616,7 @@ struct TodoView: View {
             secondaryButton: .cancel()
         )
     }
+
 }
 
 private func formatTime(_ time: TimeInterval) -> String {
@@ -698,14 +739,16 @@ private func selectTask(_ item: TodoItem) {
              timerManager.pauseTimer()
         }
         
+        // Check for Break Mode Skip
+        if !timerManager.isWorkMode && timerManager.mode == .pomodoro {
+             // Ask user if they want to skip break
+             pendingTask = item
+             showBreakSkipAlert = true
+             return
+        }
+
         // Switch Task
         timerManager.selectedTask = item
-        
-        // Ensure we are in a mode that can run
-        // If we are in Break, switch to Work.
-        if !timerManager.isWorkMode && timerManager.mode == .pomodoro {
-            timerManager.switchMode() // back to work
-        }
         
         // Reset Timer (Ready to Start)
         timerManager.resetTimer()

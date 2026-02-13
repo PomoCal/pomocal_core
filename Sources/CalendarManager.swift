@@ -80,7 +80,8 @@ class CalendarManager: ObservableObject {
         let startOfDay = calendar.startOfDay(for: date)
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
         
-        let predicate = eventStore.predicateForEvents(withStart: startOfDay, end: endOfDay, calendars: nil)
+        let predicate = eventStore.predicateForEvents(withStart: startOfDay, end: endOfDay, calendars: nil) // nil means all calendars
+        print("Fetching events for \(date) from all calendars.")
         let loadedEvents = eventStore.events(matching: predicate)
         
         DispatchQueue.main.async {
