@@ -3,6 +3,7 @@ import Charts
 
 struct SummaryView: View {
     @EnvironmentObject var todoManager: TodoManager
+    @State private var weeklyHistory: [TodoManager.DailyFocus] = []
     
     var body: some View {
         VStack(spacing: 20) {
@@ -17,6 +18,7 @@ struct SummaryView: View {
                 ScrollView {
                     VStack(spacing: 30) {
                         totalTimeCard
+                        weeklyChartSection
                         chartSection
                         taskListSection
                     }
@@ -24,7 +26,8 @@ struct SummaryView: View {
                 }
             }
         }
-        .background(Color(NSColor.windowBackgroundColor))
+    .background(Color(NSColor.windowBackgroundColor))
+    .onAppear { startWeeklyLoad() }
     }
     
     private var emptyStateView: some View {
@@ -58,6 +61,42 @@ struct SummaryView: View {
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(12)
         .padding(.horizontal)
+    }
+    
+    private func startWeeklyLoad() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let data = todoManager.getWeeklyFocusHistory()
+            DispatchQueue.main.async {
+                self.weeklyHistory = data
+            }
+        }
+    }
+    
+    private var weeklyChartSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Weekly Focus")
+                .font(.headline)
+                .padding(.horizontal)
+            
+            Chart(weeklyHistory) { item in
+                BarMark(
+                    x: .value("Day", item.date, unit: .day),
+                    y: .value("Hours", item.seconds / 3600)
+                )
+                .foregroundStyle(Color.indigo.gradient)
+                .cornerRadius(4)
+            }
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .day)) { value in
+                    AxisValueLabel(format: .dateTime.weekday(), centered: true)
+                }
+            }
+            .frame(height: 200)
+            .padding()
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(12)
+            .padding(.horizontal)
+        }
     }
     
     private var chartSection: some View {

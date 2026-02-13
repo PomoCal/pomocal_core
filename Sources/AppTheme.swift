@@ -42,3 +42,11 @@ extension View {
             .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
     }
 }
+
+extension Font {
+    static let appLargeTitle = Font.system(size: 32, weight: .bold, design: .rounded)
+    static let appTitle = Font.system(size: 20, weight: .semibold, design: .rounded)
+    static let appBody = Font.system(size: 14, weight: .regular, design: .default)
+    static let appCaption = Font.system(size: 12, weight: .medium, design: .default)
+    static let appMonospaced = Font.system(.body, design: .monospaced)
+}

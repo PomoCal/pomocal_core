@@ -101,7 +101,7 @@ struct CalendarGridView: View {
         }
         .padding(.horizontal)
         .frame(minWidth: 320)
-        .background(Color(NSColor.windowBackgroundColor))
+
     }
     
     private var monthFormatter: DateFormatter {

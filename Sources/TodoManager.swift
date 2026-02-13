@@ -470,6 +470,38 @@ class TodoManager: ObservableObject {
         self.todos = []
     }
     
+    // MARK: - History / Analytics
+    struct DailyFocus: Identifiable {
+        let id = UUID()
+        let date: Date
+        let seconds: TimeInterval
+    }
+    
+    func getWeeklyFocusHistory() -> [DailyFocus] {
+        var history: [DailyFocus] = []
+        let calendar = Calendar.current
+        // Last 7 days including today
+        for i in 0..<7 {
+            if let date = calendar.date(byAdding: .day, value: -i, to: Date()) {
+                let url = taskURL(for: date)
+                var seconds: TimeInterval = 0
+                
+                if let data = try? Data(contentsOf: url) {
+                    let decoder = JSONDecoder()
+                    if let items = try? decoder.decode([TodoItem].self, from: data) {
+                         seconds = items.reduce(0) { $0 + $1.timeSpent }
+                    } else if let legacy = try? decoder.decode(AppData.self, from: data) {
+                         seconds = legacy.todos.reduce(0) { $0 + $1.timeSpent }
+                    }
+                }
+                
+                let day = calendar.startOfDay(for: date)
+                history.append(DailyFocus(date: day, seconds: seconds))
+            }
+        }
+        return history.sorted { $0.date < $1.date }
+    }
+    
     func forceSync() {
         if syncPath == nil {
             print("No sync path set. Prompting user...")

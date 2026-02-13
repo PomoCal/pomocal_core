@@ -146,8 +146,9 @@ struct TodoRowView: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isHovering ? Color.primary.opacity(0.05) : Color.clear)
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isHovering ? Color.white : Color.white.opacity(0.6))
+                .shadow(color: Color.black.opacity(isHovering ? 0.08 : 0), radius: isHovering ? 4 : 0, x: 0, y: 2)
         )
         .contentShape(Rectangle()) // Make entire row clickable
         .onHover { hover in

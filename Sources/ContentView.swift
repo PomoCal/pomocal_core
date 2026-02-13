@@ -22,6 +22,14 @@ struct ContentView: View {
         case tasks = "Tasks"
         case library = "Library"
         case summary = "Summary"
+        
+        var icon: String {
+            switch self {
+            case .tasks: return "checklist"
+            case .library: return "books.vertical"
+            case .summary: return "chart.bar.xaxis"
+            }
+        }
     }
     
     var body: some View {
@@ -29,7 +37,7 @@ struct ContentView: View {
             // LEFT: Sidebar (Calendar & Events)
             sidebarView
                 .navigationSplitViewColumnWidth(min: 300, ideal: 320, max: 360)
-                .background(Color.white) // Unified color
+                .background(.ultraThinMaterial) // Vibrancy
         } content: {
             // MIDDLE: Content
             middleContentView
@@ -46,65 +54,9 @@ struct ContentView: View {
         .onAppear {
             calendarManager.fetchEvents(for: todoManager.selectedDate)
         }
-        .onChange(of: todoManager.selectedDate) { newDate in
-            calendarManager.fetchEvents(for: newDate)
-        }
-        .onAppear {
-            timerManager.onWorkSessionCompleted = { duration, taskTitle, bookTitle, taskId, note, rating in
-                // 1. Save to Calendar with ID, Note, and Book Title
-                calendarManager.savePomodoroEvent(
-                    duration: duration, 
-                    title: taskTitle ?? "Pomodoro Session", 
-                    bookTitle: bookTitle,
-                    taskId: taskId, 
-                    note: note
-                )
-                
-                // 2. Update Task Time & History
-                if let id = taskId {
-                    todoManager.addTime(to: id, amount: duration)
-                    let session = WorkSession(id: UUID(), startTime: Date().addingTimeInterval(-duration), endTime: Date(), duration: duration, note: note, rating: rating)
-                    todoManager.addSession(to: id, session: session)
-                }
-            }
-        }
-        .onChange(of: calendarManager.events) { _ in
-            // Sync time from Calendar events to Tasks
-            var legacyMap: [String: UUID] = [:]
-            func addToMapRecursive(_ items: [TodoItem]) {
-                for item in items {
-                    legacyMap[item.title] = item.id
-                    if let subs = item.subtasks { addToMapRecursive(subs) }
-                }
-            }
-            addToMapRecursive(todoManager.todosForSelectedDate)
-            let timeMap = calendarManager.calculateTimeSpent(for: todoManager.selectedDate, legacyTitles: legacyMap)
-            todoManager.batchUpdateTime(timeMap)
-        }
-        .sheet(isPresented: $isNoteSheetPresented) {
-            if timerManager.isWorkMode {
-                SessionNoteView(note: $timerManager.currentNote)
-            }
-        }
-        .sheet(isPresented: $timerManager.showReviewSheet) {
-            SessionReviewView().environmentObject(timerManager)
-        }
         .sheet(isPresented: $isDDaySheetPresented) {
             DDayView(manager: dDayManager)
                 .environmentObject(calendarManager)
-                .frame(minWidth: 400, minHeight: 500)
-        }
-        .alert(isPresented: $showModeSwitchAlert) {
-            Alert(
-                title: Text("Switch Mode?"),
-                message: Text("Current session progress will be lost."),
-                primaryButton: .destructive(Text("Switch")) {
-                    if let mode = pendingMode {
-                        timerManager.setMode(mode)
-                    }
-                },
-                secondaryButton: .cancel()
-            )
         }
     }
     
@@ -124,8 +76,8 @@ struct ContentView: View {
             Divider()
             
             HStack {
-                Text(Calendar.current.isDateInToday(todoManager.selectedDate) ? "TODAY" : dateHeaderFormatter.string(from: todoManager.selectedDate).uppercased())
-                    .font(.caption)
+                Text(Calendar.current.isDateInToday(todoManager.selectedDate) ? "TODAY" : dateHeaderFormatter.string(from: todoManager.selectedDate))
+                    .font(.appCaption)
                     .fontWeight(.bold)
                     .foregroundColor(.secondary)
                 Spacer()
@@ -145,7 +97,7 @@ struct ContentView: View {
                         Image(systemName: "icloud.and.arrow.up")
                         Text("Sync")
                     }
-                    .font(.caption)
+                    .font(.appCaption)
                     .fontWeight(.medium)
                     .foregroundColor(.secondary)
                     .padding(8)
@@ -172,7 +124,7 @@ struct ContentView: View {
                         Image(systemName: "calendar.badge.clock")
                         Text("D-Day")
                     }
-                    .font(.caption)
+                    .font(.appCaption)
                     .fontWeight(.medium)
                     .foregroundColor(.secondary)
                     .padding(8)
@@ -188,35 +140,40 @@ struct ContentView: View {
         }
         .padding(.top, 20)
     }
-    
-    // MARK: - Middle View
+
     var middleContentView: some View {
         VStack(spacing: 0) {
             // Modern Styled Tab Header
-            HStack(spacing: 20) {
+            HStack(spacing: 40) { // Increased spacing for icons
                 ForEach([Tab.tasks, .library, .summary], id: \.self) { tab in
                     Button(action: { withAnimation { selectedTab = tab } }) {
-                        VStack(spacing: 4) {
-                            Text(tab.rawValue.uppercased())
-                                .font(.system(size: 13, weight: .bold))
+                        VStack(spacing: 6) {
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 18, weight: .regular))
+                                .foregroundColor(selectedTab == tab ? .primary : .secondary)
+                            
+                            Text(tab.rawValue)
+                                .font(selectedTab == tab ? .appCaption.weight(.bold) : .appCaption)
                                 .foregroundColor(selectedTab == tab ? .primary : .secondary)
                             
                             if selectedTab == tab {
-                                Capsule()
+                                Circle()
                                     .fill(Color.primary)
-                                    .frame(width: 20, height: 2)
+                                    .frame(width: 4, height: 4)
+                                    .padding(.top, 2)
                                     .matchedGeometryEffect(id: "TabIndicator", in: Namespace().wrappedValue)
                             } else {
-                                Capsule()
+                                Circle()
                                     .fill(Color.clear)
-                                    .frame(width: 20, height: 2)
+                                    .frame(width: 4, height: 4)
+                                    .padding(.top, 2)
                             }
                         }
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.vertical, 12)
+            .padding(.vertical, 16)
             .background(Color.clear) // Transparent to show main background
             
             Divider()
@@ -311,7 +268,9 @@ struct ContentView: View {
                         .foregroundColor(.secondary)
                         .tracking(4)
                     
-                    FlipClockView(seconds: Int(timerManager.stopwatchSeconds), showHours: true, fontSize: 70, color: .primary)
+                    Text(timerManager.formattedTime())
+                        .font(.system(size: 80, weight: .thin, design: .monospaced))
+                        .foregroundColor(.primary)
                         .padding()
                 }
                 .frame(height: 300)
@@ -626,6 +585,7 @@ struct TodoView: View {
             .environmentObject(todoManager)
             .environmentObject(calendarManager)
     }
+
     .alert(isPresented: $showSwitchAlert) {
         Alert(
             title: Text("Switch Task?"),
