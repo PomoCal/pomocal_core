@@ -91,6 +91,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $isDDaySheetPresented) {
             DDayView(manager: dDayManager)
+                .environmentObject(calendarManager)
                 .frame(minWidth: 400, minHeight: 500)
         }
         .alert(isPresented: $showModeSwitchAlert) {

@@ -1,5 +1,6 @@
 import Foundation
 import EventKit
+import AppKit
 import Combine
 
 class CalendarManager: ObservableObject {
@@ -169,6 +170,130 @@ class CalendarManager: ObservableObject {
             fetchEvents() // Refresh list
         } catch {
             print("Failed to save event: \(error)")
+        }
+    }
+    
+    // MARK: - PomoDDay Calendar Logic
+    
+    private let pomoDDayCalendarKey = "pomoDDayCalendarId"
+    
+    func getOrCreatePomoDDayCalendar() -> EKCalendar? {
+        guard hasAccess else { return nil }
+        
+        let eventStore = self.eventStore
+        
+        // 1. Try to fetch from UserDefaults
+        if let calendarId = UserDefaults.standard.string(forKey: pomoDDayCalendarKey),
+           let calendar = eventStore.calendar(withIdentifier: calendarId) {
+            return calendar
+        }
+        
+        // 2. Fallback: Search by Title "🌟 PomoDDay"
+        let calendars = eventStore.calendars(for: .event)
+        if let existingCalendar = calendars.first(where: { $0.title == "🌟 PomoDDay" }) {
+            UserDefaults.standard.set(existingCalendar.calendarIdentifier, forKey: pomoDDayCalendarKey)
+            return existingCalendar
+        }
+        
+        // 3. Create New Calendar
+        let newCalendar = EKCalendar(for: .event, eventStore: eventStore)
+        newCalendar.title = "🌟 PomoDDay"
+        newCalendar.cgColor = NSColor.systemOrange.cgColor // Orange for D-Days
+        
+        // Find best source (iCloud or Local)
+        let sources = eventStore.sources
+        if let iCloud = sources.first(where: { $0.sourceType == .calDAV && $0.title == "iCloud" }) {
+            newCalendar.source = iCloud
+        } else if let local = sources.first(where: { $0.sourceType == .local }) {
+            newCalendar.source = local
+        } else {
+            newCalendar.source = sources.first
+        }
+        
+        do {
+            try eventStore.saveCalendar(newCalendar, commit: true)
+            UserDefaults.standard.set(newCalendar.calendarIdentifier, forKey: pomoDDayCalendarKey)
+            return newCalendar
+        } catch {
+            print("Failed to create PomoDDay calendar: \(error)")
+            return nil
+        }
+    }
+    
+    func saveDDayEvent(title: String, date: Date, dDayId: UUID) {
+        guard hasAccess, let calendar = getOrCreatePomoDDayCalendar() else { return }
+        
+        // Check for existing event for this D-Day to update it
+        // We can search by URL or specialized notes.
+        // For simplicity, let's search for an event with the specific URL.
+        
+        let url = URL(string: "pomodday://event/\(dDayId.uuidString)")
+        
+        // Search Predicate: Search around the target date (wider range to be safe if moved? No, D-Day date is key)
+        // Actually, if we are updating, the date might have changed.
+        // To robustness, we'd need to store the `eventIdentifier` in DDay struct. 
+        // BUT, user asked to "Sync". If we don't store eventID, we must search.
+        // Searching all future events is expensive.
+        // Let's rely on `deleteDDayEvent` before saving, or just simple creation.
+        // Better approach: Since we don't have eventID in DDay yet, we can try to find by ID if we modify DDay struct.
+        // User didn't ask to modify DDay persistence structure explicitly but implied syncing.
+        // For now, let's implement a "Create or Update" if possible, but without ID linkage it's hard.
+        // Okay, I will modify DDay struct to hold `eventIdentifier` in `DDayManager` later. 
+        // Here I just provide the primitive `save` which returns ID?
+        // Or better: `saveDDayEvent` searches for event with `url` in the calendar.
+        
+        // Let's implement a helper to find event by URL.
+        // Since we can't search by URL directly efficiently without date, we might scan a reasonable range or just Create New and rely on Delete Old.
+        // Wait, if I change the date, I can't find the old event by the new date.
+        // So I MUST modify DDay to store `eventIdentifier`.
+        
+        let event = EKEvent(eventStore: eventStore)
+        event.title = "📅 \(title)"
+        event.startDate = Calendar.current.startOfDay(for: date)
+        event.endDate = Calendar.current.startOfDay(for: date).addingTimeInterval(86400) // All Day
+        event.isAllDay = true
+        event.calendar = calendar
+        event.url = url
+        event.notes = "D-Day for \(title)"
+        
+        do {
+            try eventStore.save(event, span: .thisEvent, commit: true)
+        } catch {
+            print("Failed to save D-Day event: \(error)")
+        }
+    }
+    
+    func deleteDDayEvent(dDayId: UUID) {
+        // Without storing eventIdentifier, accurate deletion is hard if date changed.
+        // But if we know the ID, we can iterate calendar events? Too slow.
+        // We really should store eventIdentifier in DDay.
+    }
+    
+    // Improved Helper: Save and Return ID
+    func saveDDayEventReturningId(title: String, date: Date, dDayId: UUID) -> String? {
+        guard hasAccess, let calendar = getOrCreatePomoDDayCalendar() else { return nil }
+        
+        let event = EKEvent(eventStore: eventStore)
+        event.title = "📅 \(title)"
+        event.startDate = Calendar.current.startOfDay(for: date)
+        event.endDate = Calendar.current.startOfDay(for: date).addingTimeInterval(86400)
+        event.isAllDay = true
+        event.calendar = calendar
+        event.url = URL(string: "pomodday://event/\(dDayId.uuidString)")
+        
+        do {
+            try eventStore.save(event, span: .thisEvent, commit: true)
+            return event.eventIdentifier
+        } catch {
+            print("Failed to save D-Day event: \(error)")
+            return nil
+        }
+    }
+    
+    func deleteEvent(identifier: String) {
+        guard hasAccess else { return }
+        if let event = eventStore.event(withIdentifier: identifier) {
+            try? eventStore.remove(event, span: .thisEvent, commit: true)
         }
     }
     
