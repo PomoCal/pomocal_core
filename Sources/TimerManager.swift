@@ -19,8 +19,8 @@ class TimerManager: ObservableObject {
     
     @Published var showReviewSheet = false
     
-    // For syncing with Calendar. Passes (Duration, TaskTitle, TaskID, Note, Rating)
-    var onWorkSessionCompleted: ((TimeInterval, String?, UUID?, String?, Int?) -> Void)?
+    // For syncing with Calendar. Passes (Duration, TaskTitle, BookTitle, TaskID, Note, Rating)
+    var onWorkSessionCompleted: ((TimeInterval, String?, String?, UUID?, String?, Int?) -> Void)?
 
     
     private var timer: Timer?
@@ -104,8 +104,10 @@ class TimerManager: ObservableObject {
     func finalizeSession(rating: Int, note: String) {
         // Now we save
         let taskTitle = selectedTask?.title ?? "Pomodoro Session"
+        let bookTitle = selectedTask?.book?.title
+        
         // Use the note from the review, which might be the one typed during session + edits
-        onWorkSessionCompleted?(workDuration, taskTitle, selectedTask?.id, note, rating)
+        onWorkSessionCompleted?(workDuration, taskTitle, bookTitle, selectedTask?.id, note, rating)
         
         // Clear temp
         currentNote = ""

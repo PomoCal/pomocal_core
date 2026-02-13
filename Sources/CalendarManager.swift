@@ -88,14 +88,60 @@ class CalendarManager: ObservableObject {
         }
     }
 
-    func savePomodoroEvent(duration: TimeInterval, title: String, taskId: UUID? = nil, note: String? = nil) {
+    func getOrCreatePomoCalCalendar() -> EKCalendar? {
+        // 1. Check if it already exists
+        let calendars = eventStore.calendars(for: .event)
+        if let existing = calendars.first(where: { $0.title == "PomoCal" }) {
+            return existing
+        }
+        
+        // 2. Create new
+        let newCalendar = EKCalendar(for: .event, eventStore: eventStore)
+        newCalendar.title = "📆 PomoCal"
+        
+        // 3. Set Source (Prefer iCloud, then Local)
+        // Find iCloud source
+        let sources = eventStore.sources
+        if let iCloud = sources.first(where: { $0.sourceType == .calDAV && $0.title == "iCloud" }) {
+            newCalendar.source = iCloud
+        } else if let local = sources.first(where: { $0.sourceType == .local }) {
+            newCalendar.source = local
+        } else {
+             newCalendar.source = eventStore.defaultCalendarForNewEvents?.source
+        }
+        
+        do {
+            try eventStore.saveCalendar(newCalendar, commit: true)
+            print("Created PomoCal calendar.")
+            return newCalendar
+        } catch {
+            print("Failed to create PomoCal calendar: \(error)")
+            return nil
+        }
+    }
+
+    func savePomodoroEvent(duration: TimeInterval, title: String, bookTitle: String? = nil, taskId: UUID? = nil, note: String? = nil) {
         guard hasAccess else { return }
         
         let event = EKEvent(eventStore: eventStore)
-        event.title = title
+        
+        // Title Format: [Book Name] Task Title
+        // If no book name: Task Title
+        if let book = bookTitle, !book.isEmpty {
+            event.title = "[\(book)] \(title)"
+        } else {
+            event.title = title
+        }
+        
         event.startDate = Date().addingTimeInterval(-duration)
         event.endDate = Date()
-        event.calendar = eventStore.defaultCalendarForNewEvents
+        
+        // Use Dedicated Calendar
+        if let pomoCalendar = getOrCreatePomoCalCalendar() {
+             event.calendar = pomoCalendar
+        } else {
+             event.calendar = eventStore.defaultCalendarForNewEvents
+        }
         
         if let id = taskId {
             event.url = URL(string: "pomocal://task/\(id.uuidString)")
@@ -107,7 +153,7 @@ class CalendarManager: ObservableObject {
         
         do {
             try eventStore.save(event, span: .thisEvent)
-            print("Saved Pomodoro event to calendar")
+            print("Saved Pomodoro event to PomoCal calendar")
             fetchEvents() // Refresh list
         } catch {
             print("Failed to save event: \(error)")

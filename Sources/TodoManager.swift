@@ -55,9 +55,14 @@ struct TodoItem: Identifiable, Codable, Equatable {
     }
 }
 
-// Persistence Helper
-struct AppData: Codable {
+// Persistence Helpers
+struct AppData: Codable { // Legacy support
     let todos: [TodoItem]
+    let categories: [String]
+    let savedBooks: [BookInfo]
+}
+
+struct LibraryData: Codable { // Optimized Library Storage
     let categories: [String]
     let savedBooks: [BookInfo]
 }
@@ -77,6 +82,8 @@ class TodoManager: ObservableObject {
     
     @Published var selectedDate: Date = Date() {
         didSet {
+            // Check if date changed significantly to warrant reload?
+            // Actually, selectedDate could change by time, but typically by calendar selection.
             loadTodos(for: selectedDate)
         }
     }
@@ -105,9 +112,6 @@ class TodoManager: ObservableObject {
                                   bookmarkDataIsStale: &isStale)
                 
                 if isStale {
-                    // Bookmark is stale, might need to save a new one if possible, 
-                    // or just use it one last time to re-save? 
-                    // For now, just try to use it.
                     print("Bookmark is stale")
                 }
                 
@@ -131,8 +135,6 @@ class TodoManager: ObservableObject {
     // MARK: - Logic
     
     var todosForSelectedDate: [TodoItem] {
-        // Since 'todos' now ONLY contains items for the selected date (loaded from file),
-        // we just return 'todos'.
         return todos
     }
     
@@ -168,12 +170,7 @@ class TodoManager: ObservableObject {
             savedCategories[index] = newName
         }
         
-        // Update All Todos (Current & Saved)
-        // Note: For a file-based app, updating "all past todos" is hard without opening every file.
-        // For now, we update the *loaded* todos (current day) and maybe we can try to be smart about it later.
-        // Or we accept that historical data might keep old category name (which is fine for logs).
-        // But for "TodoItem" struct, it's just a string. 
-        
+        // Update All Todos (Current loaded)
         for i in 0..<todos.count {
             if todos[i].category == oldName {
                 todos[i].category = newName
@@ -183,10 +180,6 @@ class TodoManager: ObservableObject {
     
     func deleteCategory(_ name: String) {
         savedCategories.removeAll(where: { $0 == name })
-        
-        // Optional: Clear category from tasks? Or leave them?
-        // Let's leave them, or set to nil. 
-        // Typically deletion means "don't suggest this anymore".
     }
 
     func addTodo(_ item: TodoItem) {
@@ -218,7 +211,7 @@ class TodoManager: ObservableObject {
     }
     
     func addTime(to todoId: UUID, amount: TimeInterval) {
-        // Recursive helper that returns true if the task was found (and updated) in this branch
+        // Recursive helper
         func updateRecursive(_ item: inout TodoItem) -> Bool {
             if item.id == todoId {
                 item.timeSpent += amount
@@ -228,7 +221,6 @@ class TodoManager: ObservableObject {
             if item.subtasks != nil {
                 for i in 0..<(item.subtasks!.count) {
                     if updateRecursive(&item.subtasks![i]) {
-                        // Found in children, so add time to self (bubble up)
                         item.timeSpent += amount
                         return true
                     }
@@ -245,32 +237,20 @@ class TodoManager: ObservableObject {
     }
     
     func addSession(to todoId: UUID, session: WorkSession) {
-        // We want to add the session to the *parent* task if the target is a subtask.
-        // If the target is already a helper, add it there.
-        
-        // Helper to find parent or self
         func findAndAdd(_ item: inout TodoItem) -> Bool {
-            // Case 1: Target is this item (Top Level)
             if item.id == todoId {
                 if item.sessions == nil { item.sessions = [] }
                 item.sessions?.append(session)
                 return true
             }
             
-            // Case 2: Target is a subtask of this item
             if item.subtasks != nil {
                 for i in 0..<(item.subtasks!.count) {
                     if item.subtasks![i].id == todoId {
-                        // Found subtask! Add session to PARENT (item)
-                        // Prepend subtask title to note
                         let subTitle = item.subtasks![i].title
                         let originalNote = session.note ?? ""
-                        // Format: [Subtask Title] Note...
                         let newNote = "[\(subTitle)] \(originalNote)".trimmingCharacters(in: .whitespacesAndNewlines)
                         
-                        // We need to create a new WorkSession because 'let' properties
-                        // Actually, I made 'rating' var, but others are let.
-                        // Let's create a new struct.
                          let updatedSession = WorkSession(
                             id: session.id,
                             startTime: session.startTime,
@@ -285,14 +265,6 @@ class TodoManager: ObservableObject {
                         return true
                     }
                     
-                    // Case 3: Recursion (Grandchildren?) - Assuming depth 1 for now based on recent plan, 
-                    // but let's handle recursion if we supported it.
-                    // If we found it deep down, we should probably add it to the *immediate parent* of that subtask in the loop?
-                    // Or the top-level parent? 
-                    // User said "Subtasks inherit parent".
-                    // Let's stick to immediate parent for now, but since we are inside 'findAndAdd', 
-                    // if we recursive call findAndAdd(&subtasks[i]), it treats subtasks[i] as the parent.
-                    // So yes, it bubbles to immediate parent.
                     if findAndAdd(&item.subtasks![i]) {
                         return true
                     }
@@ -308,30 +280,17 @@ class TodoManager: ObservableObject {
         }
     }
     
-    // Batch update from Calendar Sync (Recursive with Rollup)
+    // Batch update from Calendar Sync
     func batchUpdateTime(_ timeMap: [UUID: TimeInterval]) {
-        
-        // Returns the total time for this item (including children)
         @discardableResult
         func updateRecursive(_ item: inout TodoItem) -> TimeInterval {
-            // 1. Get direct time from map (if any events linked to this specific ID)
             let directTime = timeMap[item.id] ?? 0
-            
-            // 2. Sum up children time
             var childrenTime: TimeInterval = 0
             if item.subtasks != nil {
                 for i in 0..<(item.subtasks!.count) {
                     childrenTime += updateRecursive(&item.subtasks![i])
                 }
             }
-            
-            // 3. Update self
-            // Note: If we have direct time, use it. But usually calendar events are linked to the specific task/subtask.
-            // If this is a parent, its time is (Any direct events on parent) + (Sum of all subtasks).
-            // However, 'timeMap' comes from CalendarManager, which calculates duration based on event titles/IDs.
-            // If an event is linked to a subtask ID, timeMap[subID] has value.
-            // If an event is linked to parent ID, timeMap[parentID] has value.
-            // So Total = timeMap[id] + childrenSum.
             
             let total = directTime + childrenTime
             
@@ -348,7 +307,6 @@ class TodoManager: ObservableObject {
     }
     
     func deleteTodo(at offsets: IndexSet) {
-        // Since 'todos' only has current date's items, and deleteTodo is likely called from the List showing them:
         todos.remove(atOffsets: offsets)
     }
     
@@ -359,7 +317,15 @@ class TodoManager: ObservableObject {
              return url
         }
         
-        // Fallback for non-sandboxed or default
+        // Use Ubiquity Container if available (Native iCloud)
+        if let containerURL = FileManager.default.url(forUbiquityContainerIdentifier: nil)?.appendingPathComponent("Documents") {
+            if !FileManager.default.fileExists(atPath: containerURL.path) {
+                try? FileManager.default.createDirectory(at: containerURL, withIntermediateDirectories: true, attributes: nil)
+            }
+            return containerURL
+        }
+        
+        // Fallback for non-sandboxed or default local
         let home = FileManager.default.homeDirectoryForCurrentUser
         return home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/PomodoroCalendar")
     }
@@ -448,7 +414,8 @@ class TodoManager: ObservableObject {
     
     private func saveLibrary() {
         ensureDirectoryExists()
-        let data = AppData(todos: [], categories: savedCategories, savedBooks: savedBooks) 
+        // Save optimized structure
+        let data = LibraryData(categories: savedCategories, savedBooks: savedBooks)
         if let encoded = try? JSONEncoder().encode(data) {
             try? encoded.write(to: libraryURL)
         }
@@ -456,7 +423,8 @@ class TodoManager: ObservableObject {
     
     private func saveTodos() {
         ensureDirectoryExists()
-        let data = AppData(todos: todos, categories: [], savedBooks: []) 
+        // Save raw array (optimized)
+        let data = todos
         if let encoded = try? JSONEncoder().encode(data) {
             try? encoded.write(to: taskURL(for: selectedDate))
         }
@@ -466,10 +434,16 @@ class TodoManager: ObservableObject {
         ensureDirectoryExists()
         
         // 1. Load Library
-        if let data = try? Data(contentsOf: libraryURL),
-           let decoded = try? JSONDecoder().decode(AppData.self, from: data) {
-            self.savedCategories = decoded.categories
-            self.savedBooks = decoded.savedBooks
+        // Try to decode LibraryData (new), fallback to AppData (legacy)
+        if let data = try? Data(contentsOf: libraryURL) {
+            let decoder = JSONDecoder()
+            if let decoded = try? decoder.decode(LibraryData.self, from: data) {
+                self.savedCategories = decoded.categories
+                self.savedBooks = decoded.savedBooks
+            } else if let decoded = try? decoder.decode(AppData.self, from: data) {
+                self.savedCategories = decoded.categories
+                self.savedBooks = decoded.savedBooks
+            }
         }
         
         // 2. Load Tasks for Today (Initial)
@@ -478,12 +452,22 @@ class TodoManager: ObservableObject {
     
     func loadTodos(for date: Date) {
         let url = taskURL(for: date)
-        if let data = try? Data(contentsOf: url),
-           let decoded = try? JSONDecoder().decode(AppData.self, from: data) {
-            self.todos = decoded.todos
-        } else {
-            self.todos = []
+        if let data = try? Data(contentsOf: url) {
+            let decoder = JSONDecoder()
+            // Try new format: [TodoItem]
+            if let decoded = try? decoder.decode([TodoItem].self, from: data) {
+                self.todos = decoded
+                return
+            }
+            // Try legacy format: AppData
+            if let decoded = try? decoder.decode(AppData.self, from: data) {
+                self.todos = decoded.todos
+                return
+            }
         }
+        
+        // Fallback: Empty
+        self.todos = []
     }
     
     func forceSync() {

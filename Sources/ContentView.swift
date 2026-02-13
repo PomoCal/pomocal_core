@@ -42,9 +42,15 @@ struct ContentView: View {
             calendarManager.fetchEvents(for: newDate)
         }
         .onAppear {
-            timerManager.onWorkSessionCompleted = { duration, taskTitle, taskId, note, rating in
-                // 1. Save to Calendar with ID and Note
-                calendarManager.savePomodoroEvent(duration: duration, title: taskTitle ?? "Pomodoro Session", taskId: taskId, note: note)
+            timerManager.onWorkSessionCompleted = { duration, taskTitle, bookTitle, taskId, note, rating in
+                // 1. Save to Calendar with ID, Note, and Book Title
+                calendarManager.savePomodoroEvent(
+                    duration: duration, 
+                    title: taskTitle ?? "Pomodoro Session", 
+                    bookTitle: bookTitle,
+                    taskId: taskId, 
+                    note: note
+                )
                 
                 // 2. Update Task Time & History
                 if let id = taskId {
