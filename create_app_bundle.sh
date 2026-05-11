@@ -1,4 +1,11 @@
 #!/bin/bash
+set -euo pipefail
+
+if [[ "$(uname)" != "Darwin" ]]; then
+    echo "This script must be run on macOS."
+    exit 1
+fi
+
 
 # Configuration
 APP_NAME="PomodoroCalendar"
@@ -8,6 +15,7 @@ swift build -c release
 BIN_PATH=$(swift build -c release --show-bin-path)
 
 # Create App Bundle Structure
+rm -rf "$APP_NAME.app"
 mkdir -p "$APP_NAME.app/Contents/MacOS"
 mkdir -p "$APP_NAME.app/Contents/Resources"
 

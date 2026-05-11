@@ -37,12 +37,19 @@ PomoCal은 집중하는 시간조차 기록으로 남기고 싶은 '완벽주의
    cd pomocal_core
    ```
 
-2. **의존성 확인 및 빌드**
+2. **Naver Books API 키 설정 (도서 검색 사용 시)**
+   도서 검색은 보안을 위해 API 키를 소스에 포함하지 않습니다. 개발 환경에서는 아래 환경변수를 설정하세요.
+   ```bash
+   export NAVER_CLIENT_ID="your-client-id"
+   export NAVER_CLIENT_SECRET="your-client-secret"
+   ```
+
+3. **의존성 확인 및 빌드**
    ```bash
    swift build
    ```
 
-3. **앱 번들(.app) 및 DMG 생성**
+4. **앱 번들(.app) 및 DMG 생성**
    루트 폴더에 포함된 쉘 스크립트를 사용하여 직접 빌드하고 배포용 파일을 만들 수 있습니다.
    ```bash
    chmod +x create_app_bundle.sh
