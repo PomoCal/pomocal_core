@@ -5,24 +5,24 @@ struct ContentView: View {
     @EnvironmentObject var calendarManager: CalendarManager
     @EnvironmentObject var timerManager: TimerManager
     @EnvironmentObject var todoManager: TodoManager
-    
+
     @State private var selectedTab: Tab = .tasks
     @State private var isNoteSheetPresented = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    
+
     // Mode Switch Alert State
     @State private var showModeSwitchAlert = false
     @State private var pendingMode: TimerManager.TimerMode?
-    
+
     // D-Day Manager
     @StateObject private var dDayManager = DDayManager()
     @State private var isDDaySheetPresented = false
-    
+
     enum Tab: String, CaseIterable {
         case tasks = "Tasks"
         case library = "Library"
         case summary = "Summary"
-        
+
         var icon: String {
             switch self {
             case .tasks: return "checklist"
@@ -31,7 +31,7 @@ struct ContentView: View {
             }
         }
     }
-    
+
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             // LEFT: Sidebar (Calendar & Events)
@@ -52,6 +52,7 @@ struct ContentView: View {
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 1300, minHeight: 700)
         .onAppear {
+            configureSessionCompletionHandler()
             calendarManager.fetchEvents(for: todoManager.selectedDate)
         }
         .onChange(of: todoManager.selectedDate) { newDate in
@@ -61,8 +62,64 @@ struct ContentView: View {
             DDayView(manager: dDayManager)
                 .environmentObject(calendarManager)
         }
+        .sheet(isPresented: $isNoteSheetPresented) {
+            SessionNoteView(note: $timerManager.currentNote)
+        }
+        .sheet(isPresented: $timerManager.showReviewSheet) {
+            SessionReviewView()
+                .environmentObject(timerManager)
+        }
+        .alert(isPresented: $showModeSwitchAlert) {
+            Alert(
+                title: Text("Switch Timer Mode?"),
+                message: Text("Current session progress will be lost."),
+                primaryButton: .destructive(Text("Switch")) {
+                    if let mode = pendingMode {
+                        timerManager.setMode(mode)
+                    }
+                    pendingMode = nil
+                },
+                secondaryButton: .cancel {
+                    pendingMode = nil
+                }
+            )
+        }
     }
-    
+
+    private func configureSessionCompletionHandler() {
+        timerManager.onWorkSessionCompleted = { duration, title, bookTitle, taskId, note, rating in
+            let eventTitle = title ?? "Pomodoro Session"
+            let sessionEnd = Date()
+            let sessionStart = sessionEnd.addingTimeInterval(-duration)
+            let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let sessionNote = trimmedNote?.isEmpty == true ? nil : trimmedNote
+            let sessionRating = rating == 0 ? nil : rating
+
+            calendarManager.savePomodoroEvent(
+                duration: duration,
+                title: eventTitle,
+                bookTitle: bookTitle,
+                taskId: taskId,
+                note: sessionNote
+            )
+
+            if let taskId {
+                let session = WorkSession(
+                    id: UUID(),
+                    startTime: sessionStart,
+                    endTime: sessionEnd,
+                    duration: duration,
+                    note: sessionNote,
+                    rating: sessionRating
+                )
+                todoManager.addTime(to: taskId, amount: duration)
+                todoManager.addSession(to: taskId, session: session)
+            }
+
+            calendarManager.fetchEvents(for: todoManager.selectedDate)
+        }
+    }
+
     // MARK: - Sidebar View
     private var dateHeaderFormatter: DateFormatter {
         let f = DateFormatter()
@@ -70,14 +127,14 @@ struct ContentView: View {
         f.timeStyle = .none
         return f
     }
-    
+
     var sidebarView: some View {
         VStack(spacing: 0) {
             CalendarGridView()
                 .padding(.bottom)
-            
+
             Divider()
-            
+
             HStack {
                 Text(Calendar.current.isDateInToday(todoManager.selectedDate) ? "TODAY" : dateHeaderFormatter.string(from: todoManager.selectedDate))
                     .font(.appCaption)
@@ -86,11 +143,11 @@ struct ContentView: View {
                 Spacer()
             }
             .padding()
-            
+
             CalendarListView()
-            
+
             Spacer()
-            
+
             HStack(spacing: 12) {
                 // Sync Button (Left)
                 Button(action: {
@@ -118,7 +175,7 @@ struct ContentView: View {
                         Text(path).font(.caption).foregroundColor(.secondary)
                     }
                 }
-                
+
                 // D-Day Button (Right)
                 Button(action: {
                     isDDaySheetPresented = true
@@ -154,11 +211,11 @@ struct ContentView: View {
                             Image(systemName: tab.icon)
                                 .font(.system(size: 18, weight: .regular))
                                 .foregroundColor(selectedTab == tab ? .primary : .secondary)
-                            
+
                             Text(tab.rawValue)
                                 .font(selectedTab == tab ? .appCaption.weight(.bold) : .appCaption)
                                 .foregroundColor(selectedTab == tab ? .primary : .secondary)
-                            
+
                             if selectedTab == tab {
                                 Circle()
                                     .fill(Color.primary)
@@ -178,9 +235,9 @@ struct ContentView: View {
             }
             .padding(.vertical, 16)
             .background(Color.clear) // Transparent to show main background
-            
+
             Divider()
-            
+
             switch selectedTab {
             case .tasks:
                 TodoView()
@@ -191,7 +248,7 @@ struct ContentView: View {
             }
         }
     }
-    
+
     // MARK: - Right Panel (Timer)
     var rightSidePanel: some View {
         VStack {
@@ -200,18 +257,7 @@ struct ContentView: View {
                 get: { timerManager.mode },
                 set: { newMode in
                     // Check if current session has progress that would be lost
-                    let isPomodoroActive = timerManager.mode == .pomodoro && 
-                                           timerManager.timeRemaining < 25*60 && // Assumption: default is 25m, but can change. 
-                                           // Better: timeRemaining < workDuration? 
-                                           // TimerManager doesn't expose workDuration publicly as a var... 
-                                           // Actually it does: line 27 is private. 
-                                           // But `timerManager.progress` > 0 works.
-                                           timerManager.progress > 0 && 
-                                           timerManager.timeRemaining > 0
-                    
-                    let isStopwatchActive = timerManager.mode == .stopwatch && timerManager.stopwatchSeconds > 0
-                    
-                    if timerManager.isRunning || isPomodoroActive || isStopwatchActive {
+                    if timerManager.isRunning || timerManager.hasUnsavedProgress {
                         // Warn User
                         pendingMode = newMode
                         showModeSwitchAlert = true
@@ -220,16 +266,16 @@ struct ContentView: View {
                         timerManager.setMode(newMode)
                     }
                 }
-            )) { 
+            )) {
                 Text("Pomodoro").tag(TimerManager.TimerMode.pomodoro)
                 Text("Stopwatch").tag(TimerManager.TimerMode.stopwatch)
             }
             .pickerStyle(.segmented)
             .labelsHidden() // Hide label
             .padding()
-            
+
             Spacer()
-            
+
             if timerManager.mode == .pomodoro {
                 if let task = timerManager.selectedTask {
                     Text(task.title)
@@ -244,11 +290,11 @@ struct ContentView: View {
                         .foregroundColor(.secondary)
                         .padding(.bottom, 10)
                 }
-                
+
                 // Circular Timer
                 CircularTimerView(timerManager: timerManager)
                     .frame(width: 320, height: 320)
-                    
+
             } else {
                 // Stopwatch View
                 if let task = timerManager.selectedTask {
@@ -270,18 +316,18 @@ struct ContentView: View {
                         .font(.headline)
                         .foregroundColor(.secondary)
                         .tracking(4)
-                    
+
                     FlipClockView(
                         seconds: Int(timerManager.stopwatchSeconds),
                         showHours: true,
-                        fontSize: 70, 
+                        fontSize: 70,
                         color: .primary
                     )
                     .padding()
                 }
                 .frame(height: 300)
             }
-            
+
             // Timer Controls
             HStack(spacing: 40) {
                 // Skip / Note
@@ -300,7 +346,7 @@ struct ContentView: View {
                     .buttonStyle(.plain)
                     .help("Write Note")
                 }
-                
+
                 // Play / Pause (Big Button)
                 Button(action: {
                     timerManager.isRunning ? timerManager.pauseTimer() : timerManager.startTimer()
@@ -310,7 +356,7 @@ struct ContentView: View {
                             .fill(LinearGradient(colors: [.indigo, .blue], startPoint: .top, endPoint: .bottom))
                             .frame(width: 70, height: 70)
                             .shadow(radius: 5)
-                        
+
                         Image(systemName: timerManager.isRunning ? "pause.fill" : "play.fill")
                             .font(.title)
                             .foregroundColor(.white)
@@ -318,7 +364,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.space, modifiers: [])
-                
+
                 // Stop / Reset
                 if timerManager.mode == .stopwatch {
                     Button(action: timerManager.finishStopwatch) {
@@ -337,9 +383,9 @@ struct ContentView: View {
                 }
             }
             .padding(.top, 30)
-            
+
             Spacer()
-            
+
             QuoteView()
                 .padding(.bottom, 30)
                 .padding(.horizontal, 16)
@@ -352,14 +398,14 @@ struct ContentView: View {
 struct CalendarListView: View {
     @EnvironmentObject var calendarManager: CalendarManager
     @EnvironmentObject var todoManager: TodoManager // Added for Task Logic
-    
+
     // Helper to resolve Task Details
     private func resolveTask(from event: EKEvent) -> (title: String, category: String?, isSubtask: Bool) {
         if let urlString = event.url?.absoluteString,
            urlString.starts(with: "pomocal://task/"),
            let idString = urlString.components(separatedBy: "/").last,
            let uuid = UUID(uuidString: idString) {
-            
+
             // Search in TodoManager
             // 1. Check Top Level
             if let task = todoManager.todos.first(where: { $0.id == uuid }) {
@@ -368,15 +414,15 @@ struct CalendarListView: View {
                 let displayTitle = "\(emojiIcon) \(task.title)"
                 return (displayTitle, task.category, false)
             }
-            
+
             // 2. Check Subtasks (recursively) - mark as subtask to hide
             return (event.title, nil, true)
         }
-        
+
         // Legacy or External Events: Show them as top-level
         return (event.title, nil, false)
     }
-    
+
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
@@ -387,7 +433,7 @@ struct CalendarListView: View {
                 } else {
                     ForEach(calendarManager.events, id: \.eventIdentifier) { event in
                         let taskInfo = resolveTask(from: event)
-                        
+
                         if !taskInfo.isSubtask { // FILTER: Hide subtasks
                             HStack(spacing: 12) {
                                 // Task Color Marker (Use Category Color if available, else random based on title)
@@ -395,7 +441,7 @@ struct CalendarListView: View {
                                     .fill(taskInfo.category != nil ? categoryColor(for: taskInfo.category!) : categoryColor(for: event.title ?? ""))
                                     .frame(width: 4)
                                     .frame(maxHeight: .infinity)
-                                
+
                                 VStack(alignment: .leading, spacing: 4) {
                                     // Title: [Emoji] Task Name
                                     Text(taskInfo.title)
@@ -403,15 +449,15 @@ struct CalendarListView: View {
                                         .fontWeight(.medium)
                                         .foregroundColor(.primary)
                                         .fixedSize(horizontal: false, vertical: true) // Allow wrapping
-                                    
+
                                     // Time: Start ~ End
                                     Text("\(event.startDate, formatter: timeFormatter) ~ \(event.endDate, formatter: timeFormatter)")
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                 }
-                                
+
                                 Spacer()
-                                
+
                                 // Category Badge (Right)
                                 if let category = taskInfo.category {
                                     Text(category)
@@ -441,7 +487,7 @@ struct CalendarListView: View {
             }
         }
     }
-    
+
     private let timeFormatter: DateFormatter = {
         let f = DateFormatter()
         f.timeStyle = .short
@@ -465,23 +511,23 @@ struct TodoView: View {
     @State private var showSwitchAlert = false
     @State private var showBreakSkipAlert = false
     @State private var pendingTask: TodoItem?
-    
+
     // For Editing
     @State private var taskToEdit: TodoItem?
-    
+
     // For Category Management
     @State private var isCategoryManagerPresented = false
-    
+
     // Expanded State for Subtasks
     @State private var expandedTasks: Set<UUID> = []
-    
+
     // Inline Editing
     @State private var editingTaskId: UUID? = nil
-    
+
     // Computed property to flatten the list
     private var flattenedTodos: [FlatTodoItem] {
         var result: [FlatTodoItem] = []
-        
+
         func add(items: [TodoItem], level: Int) {
             for item in items {
                 result.append(FlatTodoItem(id: item.id, item: item, level: level))
@@ -491,11 +537,11 @@ struct TodoView: View {
                 }
             }
         }
-        
+
         add(items: todoManager.todosForSelectedDate, level: 0)
         return result
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Header Action (Unified Style with Library)
@@ -504,7 +550,7 @@ struct TodoView: View {
                     .font(.title)
                     .fontWeight(.bold)
                 Spacer()
-                
+
                 // Category Management Button
                 Button(action: { isCategoryManagerPresented = true }) {
                     Image(systemName: "folder.badge.gear")
@@ -513,14 +559,14 @@ struct TodoView: View {
                 .buttonStyle(.plain)
                 .help("Manage Categories")
                 .padding(.trailing, 8)
-                
+
                 Button(action: { isAddSheetPresented = true }) {
                     Label("Add Task", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
             }
             .padding()
-            
+
             // List Area
             List {
                 if todoManager.todosForSelectedDate.isEmpty {
@@ -535,7 +581,7 @@ struct TodoView: View {
                 .frame(maxWidth: .infinity, minHeight: 150)
                 .listRowBackground(Color.clear)
             }
-            
+
             // Iterate over the Flattened List
             // Note: We use id: \.id which comes from FlatTodoItem (which uses item.id)
             ForEach(flattenedTodos) { flatItem in
@@ -571,7 +617,7 @@ struct TodoView: View {
             // Better to rely on the Row's context menu delete for subtasks, or implement a smarter onDelete.
             // For now, let's KEEP the .onDelete but it needs to map IndexSet to the Flat Items, then find them in real manager.
             // Actually, swipe-to-delete on a flattened tree is tricky. The context menu delete is safer for now.
-            // I will remove the simple .onDelete iterator modifier to avoid confusion/bugs, 
+            // I will remove the simple .onDelete iterator modifier to avoid confusion/bugs,
             // relying on the explicit Delete button in the row or context menu.
         }
         .scrollContentBackground(.hidden)
@@ -579,7 +625,7 @@ struct TodoView: View {
     }
     .sheet(isPresented: $isAddSheetPresented) {
         AddTodoView()
-        .environmentObject(todoManager) 
+        .environmentObject(todoManager)
     }
     .sheet(item: $taskToEdit) { task in
         TaskDetailView(task: task)
@@ -632,7 +678,7 @@ private func formatTime(_ time: TimeInterval) -> String {
 private func toggleCompletion(for item: TodoItem) {
     // Find parent if item is a subtask
     // Note: The structure might be deep. We need a recursive finder or just use updateTaskRecursive to flip it.
-    
+
     // Let's use the robust recursive update we already have.
     updateTaskRecursive(targetId: item.id) { task in
         var updated = task
@@ -651,7 +697,7 @@ private func deleteTodoItem(_ item: TodoItem) {
                 tasks.remove(at: i)
                 return true
             }
-            
+
             if var subtasks = tasks[i].subtasks {
                 if deleteRecursive(in: &subtasks) {
                     tasks[i].subtasks = subtasks
@@ -662,7 +708,7 @@ private func deleteTodoItem(_ item: TodoItem) {
         }
         return false
     }
-    
+
     _ = deleteRecursive(in: &todoManager.todos)
 }
 
@@ -721,14 +767,8 @@ private func updateSubtasks(in tasks: inout [TodoItem], targetId: UUID, update: 
         // Safe Switch Logic:
         // 1. Is Timer Running?
         // 2. Is there unsaved progress? (Pomodoro started OR Stopwatch started)
-        
-        let isPomodoroActive = timerManager.mode == .pomodoro && 
-                               timerManager.progress > 0 && 
-                               timerManager.timeRemaining > 0
-        
-        let isStopwatchActive = timerManager.mode == .stopwatch && timerManager.stopwatchSeconds > 0
-        
-        if timerManager.isRunning || isPomodoroActive || isStopwatchActive {
+
+        if timerManager.isRunning || timerManager.hasUnsavedProgress {
             // Warn if switching would lose progress
             pendingTask = item
             showSwitchAlert = true
@@ -741,14 +781,14 @@ private func updateSubtasks(in tasks: inout [TodoItem], targetId: UUID, update: 
             timerManager.selectedTask = item
         }
     }
-    
+
     // Helper to Prepare Task (Select & Reset Timer)
     private func startTask(_ item: TodoItem) {
         // If timer is running, pause/reset first
         if timerManager.isRunning {
              timerManager.pauseTimer()
         }
-        
+
         // Check for Break Mode Skip
         if !timerManager.isWorkMode && timerManager.mode == .pomodoro {
              // Ask user if they want to skip break
@@ -759,12 +799,12 @@ private func updateSubtasks(in tasks: inout [TodoItem], targetId: UUID, update: 
 
         // Switch Task
         timerManager.selectedTask = item
-        
+
         // Reset Timer (Ready to Start)
         timerManager.resetTimer()
-        
+
         // Note: User requested NOT to auto-start. Just prepare.
-        // timerManager.startTimer() 
+        // timerManager.startTimer()
     }
 }
 
@@ -781,10 +821,10 @@ struct QuoteView: View {
         "Action is the foundational key to all success.",
         "Success is not final, failure is not fatal: It is the courage to continue that counts."
     ]
-    
+
     // Timer to rotate quotes
     let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
-    
+
     var body: some View {
         VStack(spacing: 8) {
             Text("Daily Motivation")
@@ -792,7 +832,7 @@ struct QuoteView: View {
                 .fontWeight(.bold)
                 .foregroundColor(.secondary)
                 .tracking(1)
-            
+
             Text("\"\(quotes[currentQuoteIndex])\"")
                 .font(.callout)
                 .fontWeight(.medium)

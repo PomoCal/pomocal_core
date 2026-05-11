@@ -92,6 +92,7 @@ class CalendarManager: ObservableObject {
 
     func getOrCreatePomoCalCalendar() -> EKCalendar? {
         let kPomoCalID = "PomoCalCalendarID"
+        let pomoCalTitle = "📆 PomoCal"
         
         // 1. Try to get via saved Identifier
         if let savedID = UserDefaults.standard.string(forKey: kPomoCalID),
@@ -101,7 +102,7 @@ class CalendarManager: ObservableObject {
         
         // 2. Check if it already exists by Title (fallback)
         let calendars = eventStore.calendars(for: .event)
-        if let existing = calendars.first(where: { $0.title == "PomoCal" }) {
+        if let existing = calendars.first(where: { $0.title == pomoCalTitle || $0.title == "PomoCal" }) {
             // Save ID for next time
             UserDefaults.standard.set(existing.calendarIdentifier, forKey: kPomoCalID)
             return existing
@@ -109,7 +110,7 @@ class CalendarManager: ObservableObject {
         
         // 3. Create new
         let newCalendar = EKCalendar(for: .event, eventStore: eventStore)
-        newCalendar.title = "📆 PomoCal"
+        newCalendar.title = pomoCalTitle
         
         // Set Source (Prefer iCloud, then Local)
         let sources = eventStore.sources
@@ -327,7 +328,7 @@ class CalendarManager: ObservableObject {
         
         for event in matchingEvents {
             do {
-                try eventStore.remove(event, span: .thisEvent)
+                try eventStore.remove(event, span: .thisEvent, commit: true)
                 print("Deleted calendar event: \(title)")
             } catch {
                 print("Failed to delete event: \(error)")
@@ -386,7 +387,7 @@ class CalendarManager: ObservableObject {
         
         for event in matchingEvents {
             do {
-                try eventStore.remove(event, span: .thisEvent)
+                try eventStore.remove(event, span: .thisEvent, commit: true)
                 print("Deleted: \(event.title ?? "")")
             } catch {
                 print("Failed to delete event: \(error)")
